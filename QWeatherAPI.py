@@ -15,6 +15,7 @@ class QWeatherServer:
         if self.verbose:
             print('#########')
             print('Connecting "',self.servername,'" to QWeatherStation on IP "',self.QWeatherStationIP,'"\n')
+        self.QConstant = QConstants()
         self.servername = self.servername.encode()
         self.context = zmq.Context()
         self.QWeatherStation = self.context.socket(zmq.DEALER)
@@ -34,7 +35,7 @@ class QWeatherServer:
 
     def register_at_station(self):
         methodlist = [(func,getattr(self,func).__doc__) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)]
-        msg = [b'',b'MDPS01',0xf0.to_bytes(1,'big'),self.servername,pickle.dumps(methodlist)]
+        msg = [b'','S{:s}'.format(self.QConstant.command_ready).encode(),'QWPS01'.encode(),self.servername,pickle.dumps(methodlist)]
         if self.debug:
             print('DEBUG: To QWeatherStation: ',msg)
         self.QWeatherStation.send_multipart(msg)
@@ -66,25 +67,24 @@ class QWeatherServer:
         if self.debug:
             print('DEBUG: Calling function: ',fnc,' with arguments: ',args,kwargs)
         answ = self.methoddict[fnc](*args,**kwargs)
-        answ = [empty,b'MDPS01',0xf2.to_bytes(1,'big')] + [self.servername,client,pickle.dumps(answ)]
+        answ = [empty,'S{:s}'.format(self.QConstant.command_reply).encode()] + [self.servername,client,pickle.dumps(answ)]
         if self.debug:
             print('DEBUG: To QWeatherStation: ', answ)
         self.QWeatherStation.send_multipart(answ)
 
 
+class QConstants:
+    """Constants used for the servers, clients and brokers"""
+
+    protocol_server = 'QWPS01' #Server following majordomopatternv 0.1
+    protocol_client = 'QWPC01' #Client following majordomopatternv 0.1
+    command_ready = '1'
+    command_request = '2'
+    command_reply = '3'
+    command_disconnect = '4'
+        
+
 class QWeatherStation:
-
-    serverheader = b'MDPS01' #Server following majordomopatternv 0.1
-    clientheader = b'MDPC01' #Client following majordomopatternv 0.1
-    clientready = 0x00
-    clientrequest = 0x01
-    clientreply = 0x02
-    clientdisconnect = 0x03
-    serverready = 0xf0
-    serverrequest = 0xf1
-    serverreply = 0xf2
-    serverdisconnect = 0xf3
-
 
     def __init__(self,IP,verbose=False,debug = False):
         self.StationIP = IP
@@ -92,6 +92,7 @@ class QWeatherStation:
         self.debug = debug
         self.servers = {}
         self.clients = []
+        self.QConstant = QConstants()
         self.cnx = zmq.Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.poller = zmq.Poller()
@@ -115,27 +116,30 @@ class QWeatherStation:
                 sender = msg.pop(0)
                 if self.debug:
                     print('DEBUG: From "',sender,'": ',msg)
-                delim = msg.pop(0)
-                assert delim == b''
-                header = msg.pop(0)
-                if (header == self.serverheader):
-                    self.process_server(sender,msg)
-                elif (header == self.clientheader):
-                    self.process_client(sender,msg)
+                empty = msg.pop(0)
+                assert empty == b''
+                command = msg.pop(0).decode() # 0xFx for server and 0x0x for client
+                if command[0] == 'S': #server
+                    self.process_server(sender,command[1],msg)
+                elif (command[0] == 'C'): #client
+                    self.process_client(sender,command[1],msg)
 
                 else:
                     if self.verbose:
                         print('Invalid message')
 
-    def process_client(self,sender,msg):
-        command = int.from_bytes((msg.pop(0)),byteorder='big')
-        if command == self.clientready:
-            msg = [sender,b''] + [pickle.dumps(self.servers)]
+    def process_client(self,sender,command,msg):
+        if command == self.QConstant.command_ready:
+            version = msg.pop(0).decode()
+            if not version == self.QConstant.protocol_client:
+                msg = [sender,b'',b'Protocol error']
+            else:
+                msg = [sender,b''] + [pickle.dumps(self.servers)]
+                if self.verbose:
+                    print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
             self.socket.send_multipart(msg)
-            if self.verbose:
-                print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
 
-        elif command == self.clientrequest:
+        elif command == self.QConstant.command_request:
             server = msg.pop(0).decode()
             serveraddr = self.servers[server][0]
             msg = [serveraddr,sender,b''] + msg
@@ -146,16 +150,20 @@ class QWeatherStation:
 
 
 
-    def process_server(self,sender,msg):
-        command = int.from_bytes((msg.pop(0)),byteorder='big')
-        if command == self.serverready:
-            servername = msg.pop(0).decode()
-            servermethods = pickle.loads(msg.pop(0))
-            self.servers[servername] = (sender,servermethods)
-            if self.verbose:
-                print('Server "',servername,'" ready at: "',int.from_bytes(sender,byteorder='big'),'"')
-            ##self.socket.send_multipart([sender,b'',b'nothing'])
-        elif command == self.serverreply:
+    def process_server(self,sender,command,msg):
+        if command == self.QConstant.command_ready:
+            version = msg.pop(0).decode()
+            if not version == self.QConstant.protocol_server:
+                msg = [sender,b'',b'Protocol error']
+                self.socket.send_multipart(msg)
+            else:
+                servername = msg.pop(0).decode()
+                servermethods = pickle.loads(msg.pop(0))
+                self.servers[servername] = (sender,servermethods)
+                if self.verbose:
+                    print('Server "',servername,'" ready at: "',int.from_bytes(sender,byteorder='big'),'"')
+
+        elif command == self.QConstant.command_reply:
             server = msg.pop(0)
             client = msg.pop(0)
             answ = msg.pop(0)
@@ -163,6 +171,8 @@ class QWeatherStation:
             self.socket.send_multipart(msg)
             if self.debug:
                 print('DEBUG: To "',client,'"',msg)
+
+
 
 
 from zmq.asyncio import Context, Poller
@@ -204,6 +214,7 @@ class QWeatherClient:
     futureobjectdict = {}
 
     def __init__(self,QWeatherStationIP,loop = None):
+        self.QConstant = QConstants()
         self.QWeatherStationIP = QWeatherStationIP
         if loop is None:
             self.loop = asyncio.get_event_loop()
@@ -233,7 +244,7 @@ class QWeatherClient:
         
 
     async def get_server_info(self):
-        msg = [b'',b'MDPC01',0x00.to_bytes(1,'big')]
+        msg = [b'','C{:s}'.format(self.QConstant.command_ready).encode(),self.QConstant.protocol_client.encode(),]
         #print('sending')
         self.send_message(msg)
         msg =  await self.socket.recv_multipart()
@@ -262,7 +273,7 @@ class QWeatherClient:
         return result
 
     def sync_send_request(self,body):
-        msg = [b'',b'MDPC01',0x01.to_bytes(1,'big')] + body
+        msg = [b'','C{:s}'.format(self.QConstant.command_request).encode()] + body
         server = body[0]
         self.send_message(msg)
         msg = self.loop.run_until_complete(self.socket.recv_multipart())
@@ -274,7 +285,7 @@ class QWeatherClient:
 
     async def async_send_request(self,body):
         print('async send request')
-        msg = [b'',b'MDPC01',0x01.to_bytes(1,'big')] + body
+        msg = [b'','C{:s}'.format(self.QConstant.command_request).encode()] + body
         server = body[0]
         #print(body)
         self.send_message(msg)
