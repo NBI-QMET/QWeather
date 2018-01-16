@@ -1,13 +1,15 @@
+import sys
+sys.path.append('../')
 import time
 import numpy as np
-from QWeatherAPI import QWeatherServer, QMethod
+from qweather import QWeatherServer, QMethod
 
 class Server(QWeatherServer):
 
     def __init__(self):
         self.QWeatherStationIP = "tcp://localhost:5559"
-        self.servername = 'TestServer2'
-        self.verbose = True
+        self.servername = 'TestServer'
+        self.verbose = False
         self.debug = False
         self.initialize_sockets()
 
