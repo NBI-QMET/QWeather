@@ -21,7 +21,8 @@ Frame | msg | Meaning
 4 | "TestServer" | Name of Server
 5 | list | List of server methods arranged as a dictionary with the method name being the key and the docstring being the item
 
-
+---
+***
 ### Client
 #### Request to server
 Frame | msg | Meaning
