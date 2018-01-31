@@ -1,6 +1,7 @@
 from .constants import *
 import zmq
 import pickle
+import time
 def QMethod(func):
     '''Decorator for exposing methods that can be called by clients'''
     func.is_client_accessible = True
@@ -38,13 +39,18 @@ class QWeatherServer:
 
     def run(self):
         #Broadcast method information
-        
+        tic = time.time()
         while True:
             try:
                 items = self.poller.poll(1000)
                 if items:
                     msg = self.QWeatherStation.recv_multipart()
                     self.handle_messages(msg)
+                toc = time.time()
+                if toc-tic > 1:
+                    answ = [b'',b'H',self.servername]
+                    self.QWeatherStation.send_multipart(answ)    
+                    tic = toc
             except KeyboardInterrupt:
                 break
 
@@ -66,7 +72,7 @@ class QWeatherServer:
             answ = [empty,b'S',CREPLY] + [self.servername,client,pickle.dumps(answ)]
             if self.debug:
                 print('DEBUG: To QWeatherStation: ', answ)
-            self.QWeatherStation.send_multipart(answ)
+            self.QWeatherStation.send_multipart(answ)        
 
         elif command == CREADY+CSUCCESS:
             if self.verbose:

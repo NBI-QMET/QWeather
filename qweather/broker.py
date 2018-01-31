@@ -1,6 +1,7 @@
 from .constants import *
 import zmq
 import pickle
+import time
 #from zmq.asyncio import Context, Poller
 
 class QWeatherStation:
@@ -20,6 +21,8 @@ class QWeatherStation:
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
         self.socket.bind(self.StationIP)
+        self.heartbeatlist = {}
+        self.heartbeattimeout = 2
         if self.verbose:
             print('QWeatherStation ready to run on IP: "',self.StationIP,'"')
 
@@ -35,6 +38,7 @@ class QWeatherStation:
                 self.handle_message(msg)
 
     def run(self):
+        tic = time.time()
         while True:
             try:
                 items = self.poller.poll(1000)
@@ -44,6 +48,25 @@ class QWeatherStation:
             if items:
                 msg = self.socket.recv_multipart()
                 self.handle_message(msg)
+            toc = time.time()
+            if toc-tic > self.heartbeattimeout:
+                tic = time.time()
+                for aconnection in self.heartbeatlist.items():
+                    self.heartbeatlist[aconnection[0]] -= 1
+                for aconnection in self.heartbeatlist.items():
+                    if aconnection[1] < 1:
+                        if self.debug:
+                            print('Removing ',aconnection[0],' due to timeout')
+                        try:
+                            self.clients.remove(aconnection[0])
+                        except ValueError:
+                            pass
+                        try:
+                            self.servers.pop(aconnection[0])
+                        except KeyError:
+                            pass
+                self.heartbeatlist = dict((k,v) for k,v in self.heartbeatlist.items() if v>0)
+
         
 
     def handle_message(self,msg):
@@ -53,12 +76,19 @@ class QWeatherStation:
         empty = msg.pop(0)
         assert empty == b''
         SenderType = msg.pop(0)
-        command = msg.pop(0) # 0xFx for server and 0x0x for client
         if SenderType == b'S': #server
+            command = msg.pop(0) # 0xFx for server and 0x0x for client
             self.process_server(sender,command,msg)
         elif (SenderType == b'C'): #client
+            command = msg.pop(0) # 0xFx for server and 0x0x for client
             self.process_client(sender,command,msg)
 
+        elif SenderType == b'H': #heartbeat
+            sender = msg.pop(0).decode()
+            if self.debug:
+                print('Recieved heartbeat from ',sender)
+            if sender in self.heartbeatlist:
+                self.heartbeatlist[sender] = HEARTBEATMAX
         else:
             if self.verbose:
                 print('Invalid message')
@@ -70,10 +100,12 @@ class QWeatherStation:
                 newmsg = [sender,b'',CREADY + CFAIL,'Mismatch in protocol between client and broker'.encode()]
             else:
                 newmsg = [sender,b'',CREADY + CSUCCESS] + [pickle.dumps(self.servers)]
+
                 if self.verbose:
                     print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
-
-                self.clients.append(msg.pop(0).decode())
+                name = msg.pop(0)
+                self.clients.append(name.decode())
+                self.heartbeatlist[name.decode()] =HEARTBEATMAX
             self.socket.send_multipart(newmsg)
 
         elif command == CREQUEST:
@@ -90,7 +122,6 @@ class QWeatherStation:
 
 
 
-
     def process_server(self,sender,command,msg):
         if command == CREADY:
             version = msg.pop(0)
@@ -102,6 +133,7 @@ class QWeatherStation:
                 servermethods = pickle.loads(msg.pop(0))
                 self.servers[servername] = (sender,servermethods,[])
                 newmsg = [sender,b'',CREADY + CSUCCESS]
+                self.heartbeatlist[servername] = HEARTBEATMAX
                 if self.verbose:
                     print('Server "',servername,'" ready at: "',int.from_bytes(sender,byteorder='big'),'"')
             self.socket.send_multipart(newmsg)
@@ -118,3 +150,4 @@ class QWeatherStation:
                 self.socket.send_multipart(self.servers[server][2].pop(0))
                 if self.debug:
                     print('DEBUG: CLient request at"',sender,'":',msg)
+

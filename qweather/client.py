@@ -3,6 +3,7 @@ import zmq
 import pickle
 from zmq.asyncio import Context, Poller
 import asyncio
+import time
 class QWeatherClient:
 
     class serverclass:
@@ -145,6 +146,7 @@ class QWeatherClient:
 
     async def run(self):
         self.running = True
+        tic = time.time()
         while True:
             try:
                 #print('polling')
@@ -162,11 +164,19 @@ class QWeatherClient:
                         msg = pickle.loads(msg[0])
                     #print(msg)
                         self.futureobjectdict[server].set_result(msg)
+                    elif command == CHEARTBEAT:
+                        answ = [empty,b'S',CHEARTBEAT]
+                        self.socket.send_multipart(answ) 
                     elif command == CREQUEST + CFAIL:
                         server = msg.pop(0)
                         self.futureobjectdict[server].set_exception(Exception(msg.pop(0)))
 
                     #print(msg)
+                    toc = time.time()
+                    if toc-tic > 1:
+                        answ = [empty,b'H',self.name]
+                        self.QWeatherStation.send_multipart(answ)    
+                        tic = toc
             except KeyboardInterrupt:
                 break
                 #self.socket.close()
