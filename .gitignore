@@ -1,1 +1,4 @@
 *.pyc
+QWeather.egg-info/
+dist/
+Implemented Servers and Clients/Clients/FreqLogger.py
