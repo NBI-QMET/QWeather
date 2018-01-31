@@ -1,7 +1,8 @@
 import sys
 sys.path.append('../')
-import qweather
+from qweather import QWeatherStation
+#$import qweather.QWeatherStation
 
 if __name__ == "__main__":
-	broker = qweather.QWeatherStation("tcp://*:5559",verbose=False,debug = False)
+	broker = QWeatherStation("tcp://*:5559",verbose=False,debug = True)
 	broker.run()

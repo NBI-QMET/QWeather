@@ -2,7 +2,9 @@ from PyQt5.QtWidgets import *
 from PyQt5 import QtGui
 from quamash import QEventLoop, QThreadExecutor
 import asyncio
-from QWeatherAPI import QWeatherClient
+import sys
+sys.path.append('../')
+from qweather import QWeatherClient
 
 
 class testgui(QWidget):
@@ -36,14 +38,21 @@ class testgui(QWidget):
 
 
     def send_command(self,func,label):
-
-        self.loop.create_task(self.blocking_call(func,label))
+        try:
+            self.loop.create_task(self.blocking_call(func,label))
+        except Exception as e:
+            print(e)
 #       yield ans
         #print(ans)
 
     async def blocking_call(self,func,label):
-        a = await func 
-        label.setText(a.decode())
+        try:
+            a = await func 
+            print(a)
+            label.setText('{:f}'.format(float(a)))
+        except Exception as e:
+            print(e)
+        
 #        return a
 
 

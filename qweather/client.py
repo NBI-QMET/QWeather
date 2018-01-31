@@ -1,4 +1,4 @@
-from .constants import QConstants
+from .constants import *
 import zmq
 import pickle
 from zmq.asyncio import Context, Poller
@@ -40,7 +40,6 @@ class QWeatherClient:
     futureobjectdict = {}
 
     def __init__(self,QWeatherStationIP,loop = None):
-        self.QConstant = QConstants()
         self.QWeatherStationIP = QWeatherStationIP
         if loop is None:
             self.loop = asyncio.get_event_loop()
@@ -70,18 +69,22 @@ class QWeatherClient:
         
 
     async def get_server_info(self):
-        msg = [b'','C{:s}'.format(self.QConstant.command_ready).encode(),self.QConstant.protocol_client.encode(),]
+        msg = [b'',b'C',CREADY,PCLIENT]
         #print('sending')
         self.send_message(msg)
         msg =  await self.socket.recv_multipart()
         empty = msg.pop(0)
         assert empty == b''
-        for name,items in pickle.loads(msg.pop(0)).items():
-            addr = items[0]
-            methods = items[1]
-            server = self.serverclass(name,addr,methods,self)
-            server.is_remote_server = True
-            setattr(self,name,server)
+        command = msg.pop(0)
+        if command == CREADY + CFAIL:
+            raise Exception(msg.pop(0).decode())
+        else:
+            for name,items in pickle.loads(msg.pop(0)).items():
+                addr = items[0]
+                methods = items[1]
+                server = self.serverclass(name,addr,methods,self)
+                server.is_remote_server = True
+                setattr(self,name,server)
             
 
 #                _method = 
@@ -99,23 +102,27 @@ class QWeatherClient:
         return result
 
     def sync_send_request(self,body):
-        msg = [b'','C{:s}'.format(self.QConstant.command_request).encode()] + body
+        msg = [b'',b'C',CREQUEST] + body
         server = body[0]
         self.send_message(msg)
         msg = self.loop.run_until_complete(self.socket.recv_multipart())
         empty = msg.pop(0)
         assert empty == b''
+        command = msg.pop(0)
+
         server = msg.pop(0)
         answ = pickle.loads(msg[0])
         return answ
 
     async def async_send_request(self,body):
-        print('async send request')
-        msg = [b'','C{:s}'.format(self.QConstant.command_request).encode()] + body
+        msg = [b'',b'C',CREQUEST] + body
         server = body[0]
         #print(body)
+        if server in self.futureobjectdict.keys():
+            raise Exception('Already waiting for response from that server')
         self.send_message(msg)
         answ = await self.recieve_message(server)
+        self.futureobjectdict.pop(server)
         return answ
        # return msg
 
@@ -147,12 +154,17 @@ class QWeatherClient:
                     print('recieved',msg)
                     empty = msg.pop(0)
                     assert empty == b''
-                    server = msg.pop(0)
+                    command = msg.pop(0)
+                    if command == CREQUEST + CSUCCESS:
+                        server = msg.pop(0)
                     #print(server)
                     #print(self.futureobjectdict)
-                    msg = pickle.loads(msg[0])
+                        msg = pickle.loads(msg[0])
                     #print(msg)
-                    self.futureobjectdict[server].set_result(msg)
+                        self.futureobjectdict[server].set_result(msg)
+                    elif command == CREQUEST + CFAIL:
+                        server = msg.pop(0)
+                        self.futureobjectdict[server].set_exception(Exception(msg.pop(0)))
 
                     #print(msg)
             except KeyboardInterrupt:

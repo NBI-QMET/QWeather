@@ -19,6 +19,7 @@ class Server(QWeatherServer):
 #        socket.send(b"%f" % np.random.rand())
         #time.sleep(2)
         num = b"%f" % (np.random.rand()+offset)
+        num = self.multiply_stuff(12,13)
         return num
 
     @QMethod
