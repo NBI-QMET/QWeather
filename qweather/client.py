@@ -39,12 +39,13 @@ class QWeatherClient:
     poller = None
     futureobjectdict = {}
 
-    def __init__(self,QWeatherStationIP,loop = None):
+    def __init__(self,QWeatherStationIP,name,loop = None):
         self.QWeatherStationIP = QWeatherStationIP
         if loop is None:
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
+        self.name = name.encode()
         self.reconnect()
         self.loop.run_until_complete(self.get_server_info())
         self.running = False
@@ -69,8 +70,7 @@ class QWeatherClient:
         
 
     async def get_server_info(self):
-        msg = [b'',b'C',CREADY,PCLIENT]
-        #print('sending')
+        msg = [b'',b'C',CREADY,PCLIENT,self.name]
         self.send_message(msg)
         msg =  await self.socket.recv_multipart()
         empty = msg.pop(0)

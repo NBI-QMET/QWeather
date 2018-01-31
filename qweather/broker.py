@@ -1,27 +1,40 @@
 from .constants import *
 import zmq
 import pickle
+#from zmq.asyncio import Context, Poller
 
 class QWeatherStation:
 
-    def __init__(self,IP,verbose=False,debug = False):
+    def __init__(self,IP,loop = None,verbose=False,debug = False):
+        if loop is None:
+            from zmq import Context,Poller
+        else:
+            from zmq.asyncio import Context,Poller
         self.StationIP = IP
         self.verbose = verbose
         self.debug = debug
         self.servers = {}
         self.clients = []
-        self.workingservers = {}
-        self.cnx = zmq.Context()
+        self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
-        self.poller = zmq.Poller()
+        self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
         self.socket.bind(self.StationIP)
         if self.verbose:
             print('QWeatherStation ready to run on IP: "',self.StationIP,'"')
 
+    async def async_run(self):
+        while True:
+            try:
+                items = await self.poller.poll(1000)
+            except KeyboardInterrupt:
+                break
+
+            if items:
+                msg = await self.socket.recv_multipart()
+                self.handle_message(msg)
+
     def run(self):
-
-
         while True:
             try:
                 items = self.poller.poll(1000)
@@ -30,22 +43,25 @@ class QWeatherStation:
 
             if items:
                 msg = self.socket.recv_multipart()
+                self.handle_message(msg)
+        
 
-                sender = msg.pop(0)
-                if self.debug:
-                    print('DEBUG: From "',sender,'": ',msg)
-                empty = msg.pop(0)
-                assert empty == b''
-                SenderType = msg.pop(0)
-                command = msg.pop(0) # 0xFx for server and 0x0x for client
-                if SenderType == b'S': #server
-                    self.process_server(sender,command,msg)
-                elif (SenderType == b'C'): #client
-                    self.process_client(sender,command,msg)
+    def handle_message(self,msg):
+        sender = msg.pop(0)
+        if self.debug:
+            print('DEBUG: From "',sender,'": ',msg)
+        empty = msg.pop(0)
+        assert empty == b''
+        SenderType = msg.pop(0)
+        command = msg.pop(0) # 0xFx for server and 0x0x for client
+        if SenderType == b'S': #server
+            self.process_server(sender,command,msg)
+        elif (SenderType == b'C'): #client
+            self.process_client(sender,command,msg)
 
-                else:
-                    if self.verbose:
-                        print('Invalid message')
+        else:
+            if self.verbose:
+                print('Invalid message')
 
     def process_client(self,sender,command,msg):
         if command == CREADY:
@@ -56,6 +72,8 @@ class QWeatherStation:
                 newmsg = [sender,b'',CREADY + CSUCCESS] + [pickle.dumps(self.servers)]
                 if self.verbose:
                     print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
+
+                self.clients.append(msg.pop(0).decode())
             self.socket.send_multipart(newmsg)
 
         elif command == CREQUEST:

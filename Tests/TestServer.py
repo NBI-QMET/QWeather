@@ -18,8 +18,7 @@ class Server(QWeatherServer):
         """Return a numper upon request"""
 #        socket.send(b"%f" % np.random.rand())
         #time.sleep(2)
-        num = b"%f" % (np.random.rand()+offset)
-        num = self.multiply_stuff(12,13)
+        num = (np.random.rand()+offset)
         return num
 
     @QMethod
