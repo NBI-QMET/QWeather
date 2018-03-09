@@ -40,12 +40,16 @@ class QWeatherClient:
     poller = None
     futureobjectdict = {}
 
-    def __init__(self,QWeatherStationIP,name,loop = None):
+    def __init__(self,QWeatherStationIP,name = None,loop = None):
         self.QWeatherStationIP = QWeatherStationIP
         if loop is None:
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
+
+        if name is None:
+            import socket
+            name = socket.gethostname()
         self.name = name.encode()
         self.reconnect()
         self.loop.run_until_complete(self.get_server_info())
