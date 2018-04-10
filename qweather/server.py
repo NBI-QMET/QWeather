@@ -47,7 +47,7 @@ class QWeatherServer:
                     msg = self.QWeatherStation.recv_multipart()
                     self.handle_messages(msg)
                 toc = time.time()
-                if toc-tic > 1:
+                if toc-tic > 30:
                     answ = [b'',b'H',self.servername]
                     self.QWeatherStation.send_multipart(answ)    
                     tic = toc
@@ -63,13 +63,14 @@ class QWeatherServer:
         command = msg.pop(0)
 
         if command == CREQUEST:
+            messageid = msg.pop(0)
             client = msg.pop(0)
             fnc = msg.pop(0).decode()
             args,kwargs = pickle.loads(msg.pop(0))
             if self.debug:
                 print('DEBUG: Calling function: ',fnc,' with arguments: ',args,kwargs)
             answ = self.methoddict[fnc](*args,**kwargs)
-            answ = [empty,b'S',CREPLY] + [self.servername,client,pickle.dumps(answ)]
+            answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
             if self.debug:
                 print('DEBUG: To QWeatherStation: ', answ)
             self.QWeatherStation.send_multipart(answ)        

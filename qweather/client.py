@@ -54,6 +54,8 @@ class QWeatherClient:
         self.reconnect()
         self.loop.run_until_complete(self.get_server_info())
         self.running = False
+        self.messageid = 0
+
 
 
 
@@ -73,7 +75,7 @@ class QWeatherClient:
         self.poller.register(self.socket,zmq.POLLIN)
         #lol = asyncio.ensure_future()
         
-
+    
     async def get_server_info(self):
         msg = [b'',b'C',CREADY,PCLIENT,self.name]
         self.send_message(msg)
@@ -100,14 +102,17 @@ class QWeatherClient:
         return None
 
     def send_request(self,body):
+        self.messageid+=1
+        if self.messageid > 255:
+            self.messageid = 0
         if self.running:
-            result =  asyncio.get_event_loop().create_task(self.async_send_request(body))
+            result =  asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
         else:
-            result = self.sync_send_request(body)
+            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
         return result
 
-    def sync_send_request(self,body):
-        msg = [b'',b'C',CREQUEST] + body
+    def sync_send_request(self,body,ident):
+        msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)
         msg = self.loop.run_until_complete(self.socket.recv_multipart())
@@ -118,16 +123,15 @@ class QWeatherClient:
         server = msg.pop(0)
         answ = pickle.loads(msg[0])
         return answ
-
-    async def async_send_request(self,body):
-        msg = [b'',b'C',CREQUEST] + body
+    
+    async def async_send_request(self,body,ident):
         server = body[0]
-        #print(body)
-        if server in self.futureobjectdict.keys():
-            raise Exception('Already waiting for response from that server')
+        msg = [b'',b'C',CREQUEST,ident]  + body
+
+
         self.send_message(msg)
-        answ = await self.recieve_message(server)
-        self.futureobjectdict.pop(server)
+        answ = await self.recieve_message(ident+server)
+        self.futureobjectdict.pop(ident+server)
         return answ
        # return msg
 
@@ -136,9 +140,9 @@ class QWeatherClient:
         self.socket.send_multipart(msg)
 
 
-    def recieve_message(self,servername):
+    def recieve_message(self,ident):
         tmp = self.loop.create_future()
-        self.futureobjectdict[servername] = tmp
+        self.futureobjectdict[ident] = tmp
         #print('went here')
         return tmp
 
@@ -147,40 +151,33 @@ class QWeatherClient:
 #        ans = await self.socket.recv_multipart()
   #      return ans
 
-
     async def run(self):
         self.running = True
         tic = time.time()
         while True:
             try:
-                #print('polling')
                 items = await self.poller.poll(1000)
                 if items:
                     msg = await self.socket.recv_multipart()
-                    print('recieved',msg)
                     empty = msg.pop(0)
                     assert empty == b''
                     command = msg.pop(0)
                     if command == CREQUEST + CSUCCESS:
+                        messageid = msg.pop(0)
                         server = msg.pop(0)
-                    #print(server)
-                    #print(self.futureobjectdict)
                         msg = pickle.loads(msg[0])
-                    #print(msg)
-                        self.futureobjectdict[server].set_result(msg)
-                    elif command == CHEARTBEAT:
-                        answ = [empty,b'S',CHEARTBEAT]
-                        self.socket.send_multipart(answ) 
+                        self.futureobjectdict[messageid + server].set_result(msg)
                     elif command == CREQUEST + CFAIL:
+                        messageid = msg.pop(0)
                         server = msg.pop(0)
-                        self.futureobjectdict[server].set_exception(Exception(msg.pop(0)))
+                        self.futureobjectdict[messageid+server].set_exception(Exception(msg.pop(0)))
 
                     #print(msg)
-                    toc = time.time()
-                    if toc-tic > 1:
-                        answ = [empty,b'H',self.name]
-                        self.QWeatherStation.send_multipart(answ)    
-                        tic = toc
+                toc = time.time()
+                if toc-tic > 30:
+                    answ = [b'',b'H',self.name]
+                    self.send_message(answ)    
+                    tic = toc
             except KeyboardInterrupt:
                 break
                 #self.socket.close()

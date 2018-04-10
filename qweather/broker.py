@@ -22,11 +22,12 @@ class QWeatherStation:
         self.poller.register(self.socket,zmq.POLLIN)
         self.socket.bind(self.StationIP)
         self.heartbeatlist = {}
-        self.heartbeattimeout = 2
+        self.heartbeattimeout = 30*HEARTBEATMAX
         if self.verbose:
             print('QWeatherStation ready to run on IP: "',self.StationIP,'"')
 
     async def async_run(self):
+        tic = time.time()
         while True:
             try:
                 items = await self.poller.poll(1000)
@@ -37,6 +38,25 @@ class QWeatherStation:
                 msg = await self.socket.recv_multipart()
                 self.handle_message(msg)
 
+            toc = time.time()
+            if toc-tic > self.heartbeattimeout:
+                tic = time.time()
+                for aconnection in self.heartbeatlist.items():
+                    self.heartbeatlist[aconnection[0]] -= 1
+                for aconnection in self.heartbeatlist.items():
+                    if aconnection[1] < 1:
+                        if self.debug:
+                            print('Removing ',aconnection[0],' due to timeout')
+                        try:
+                            self.clients.remove(aconnection[0])
+                        except ValueError:
+                            pass
+                        try:
+                            self.servers.pop(aconnection[0])
+                        except KeyError:
+                            pass
+                self.heartbeatlist = dict((k,v) for k,v in self.heartbeatlist.items() if v>0)
+
     def run(self):
         tic = time.time()
         while True:
@@ -44,7 +64,6 @@ class QWeatherStation:
                 items = self.poller.poll(1000)
             except KeyboardInterrupt:
                 break
-
             if items:
                 msg = self.socket.recv_multipart()
                 self.handle_message(msg)
@@ -86,7 +105,7 @@ class QWeatherStation:
         elif SenderType == b'H': #heartbeat
             sender = msg.pop(0).decode()
             if self.debug:
-                print('Recieved heartbeat from ',sender)
+                print('Recieved heartbeat from',sender)
             if sender in self.heartbeatlist:
                 self.heartbeatlist[sender] = HEARTBEATMAX
         else:
@@ -104,15 +123,16 @@ class QWeatherStation:
                 if self.verbose:
                     print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
                 name = msg.pop(0)
-                self.clients.append(name.decode())
+                if name.decode() not in self.clients:
+                    self.clients.append(name.decode())
                 self.heartbeatlist[name.decode()] =HEARTBEATMAX
             self.socket.send_multipart(newmsg)
 
         elif command == CREQUEST:
+            messageid = msg.pop(0)
             server = msg.pop(0).decode()
             serveraddr = self.servers[server][0]
-            msg = [serveraddr,b'',CREQUEST,sender] + msg
-            print(len(self.servers[server][2]))
+            msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
             if len(self.servers[server][2]) ==  0:
                 self.socket.send_multipart(msg)
                 if self.debug:
@@ -139,10 +159,11 @@ class QWeatherStation:
             self.socket.send_multipart(newmsg)
 
         elif command == CREPLY:
+            messageid = msg.pop(0)
             server = msg.pop(0).decode()
             client = msg.pop(0)
             answ = msg.pop(0)
-            msg = [client,b'',CREQUEST + CSUCCESS,server.encode(),answ]
+            msg = [client,b'',CREQUEST + CSUCCESS,messageid,server.encode(),answ]
             self.socket.send_multipart(msg)
             if self.debug:
                 print('DEBUG: To "',client,'"',msg)

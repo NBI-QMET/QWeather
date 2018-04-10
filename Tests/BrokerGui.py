@@ -1,6 +1,5 @@
 from PyQt5.QtWidgets import *
 from PyQt5 import QtGui
-from quamash import QEventLoop, QThreadExecutor
 import asyncio
 import sys
 sys.path.append('../')
@@ -13,7 +12,7 @@ class BrokerGui(QWidget):
         super().__init__()
 
         self.brokerconn = "tcp://*:5559"
-        self.broker = QWeatherStation(self.brokerconn,loop)
+        self.broker = QWeatherStation(self.brokerconn,loop,debug=True,verbose=False)
         self.setWindowTitle('QWeatherStation')
 
         self.initialize()
@@ -46,8 +45,10 @@ class BrokerGui(QWidget):
 
     def make_server_client_panel(self):
         panel = QFrame()
-        self.serverlist = QFrame()
-        self.clientlist = QFrame()
+        self.serverlist = QTextEdit()
+        self.serverlist.setReadOnly(True)
+        self.clientlist = QTextEdit()
+        self.clientlist.setReadOnly(True)
         self.serverlist.setLayout(QVBoxLayout())
         self.clientlist.setLayout(QVBoxLayout())
         panellayout = QHBoxLayout()
@@ -59,37 +60,44 @@ class BrokerGui(QWidget):
         return panel
 
     def populate_serverlist(self):
-        self.clearLayout(self.serverlist.layout())
+        servertext = ''
         for aserver in self.broker.servers.keys():
-            alabel = QLabel("{:s}".format(aserver))
-            self.serverlist.layout().addWidget(alabel)
-        if self.serverlist.layout().count() == 0:
-            self.serverlist.layout().addWidget(QLabel(' ---- No Servers Connected ----'))
+            servertext += aserver + '\n'
+        if len(self.broker.servers) == 0:
+            servertext = ' ---- No Servers Connected ----'
+        self.serverlist.setText(servertext)
 
 
     def populate_clientlist(self):
-        self.clearLayout(self.clientlist.layout())
-        for aserver in self.broker.clients:
-            alabel = QLabel("{:s}".format(aserver))
-            self.clientlist.layout().addWidget(alabel)
-        if self.clientlist.layout().count() == 0:
-            self.clientlist.layout().addWidget(QLabel(' ---- No Clients Connected ----'))
+        clienttext = ''
+        for aclient in self.broker.clients:
+            clienttext += aclient + '\n'
+        if len(self.broker.clients) == 0:
+            clienttext = ' ---- No Clients Connected ----'
+        self.clientlist.setText(clienttext)
 
-    def clearLayout(self,layout):
-      while layout.count():
-        child = layout.takeAt(0)
-        if child.widget():
-          child.widget().deleteLater()
 
 async def process_events(qapp):
     while True:
         await asyncio.sleep(0)
         qapp.processEvents()
 
+def icon():
+    iconstring = ["40 40 4 1","   c #FFFFFF",".  c #000000","+  c #AE7C3C","@  c #FF1E00",
+                  "                                        ","                                        ","            ................            ","       .....               +.....       ","       .....               +.....       ",
+                  "    .....++++              ++++.....    ","   .+++++++++            +++++++++++.   ","   .+++++++++            +++++++++++.   "," ..+++++++              +++++++++++++.. ",".++++++..             +++++++++..++++++.",
+                  ".++++++..             +++++++++..++++++.",".++++++..            ++++++++++..++++++.",".++++++..      ...   +++...++++..++++++.",".++++++..      ...   +++...++++..++++++.",".++++++..      ...   +++...++++..++++++.",
+                  " ..++++..            ++++++++++..++++.. "," ..++++..            ++++++++++..++++.. ","   .+++..            ++++++++++..+++.   ","   .+++..             +++++++++..+++.   ","   .+++..             +++++++++..+++.   ",
+                  "   .+++..               +++++++..+++.   ","   .+++..               +++++++..+++.   ","   .+++..               +++++++..+++.   ","    ...  ...   ..........  +...  ...    ","          ..   ..........   ..          ",
+                  "          ..   ..........   ..          ","          ..   ..........   ..          ","          ..      ....      ..          ","          ..      ....      ..          ","          ..      ....      ..          ",
+                  "          ...              ...          ","          ...              ...          ","            ...          ...            ","             ..............             ","             ..............             ",
+                  "                ..@@@@..                ","                ..@..@..                ","                ..@..@..                ","                ........                ","                                        "]
+    return iconstring
 
 
 if __name__=="__main__":
-    a = QApplication( [] )
+    a = QApplication( [sys.argv] )
+    a.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(icon())))
 #    loop = QEventLoop(a)
  #   asyncio.set_event_loop(loop)
     loop = asyncio.get_event_loop()
@@ -98,3 +106,4 @@ if __name__=="__main__":
 #    with loop:
  #      loop.run_until_complete(w.client.run())
 
+    sys.exit(a.exec_())

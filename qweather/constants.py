@@ -1,7 +1,7 @@
 """Constants used for the servers, clients and brokers"""
 
-PSERVER = 'QWPS01'.encode() #Server following majordomopatternv 0.1
-PCLIENT = 'QWPC01'.encode() #Client following majordomopatternv 0.1
+PSERVER = 'QWPS02'.encode() #Server following majordomopatternv 0.2
+PCLIENT = 'QWPC02'.encode() #Client following majordomopatternv 0.2
 CREADY = '1'.encode()
 CREQUEST = '2'.encode()
 CREPLY = '3'.encode()
