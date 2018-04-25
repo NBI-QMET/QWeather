@@ -70,7 +70,6 @@ class QWeatherClient:
         self.context = Context()
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.connect(self.QWeatherStationIP)
-        self.serverlist = []
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
         #lol = asyncio.ensure_future()
@@ -83,6 +82,7 @@ class QWeatherClient:
         empty = msg.pop(0)
         assert empty == b''
         command = msg.pop(0)
+        self.serverlist = []
         if command == CREADY + CFAIL:
             raise Exception(msg.pop(0).decode())
         else:
@@ -92,6 +92,7 @@ class QWeatherClient:
                 server = self.serverclass(name,addr,methods,self)
                 server.is_remote_server = True
                 setattr(self,name,server)
+                self.serverlist.append(server)
             
 
 #                _method = 
@@ -119,7 +120,7 @@ class QWeatherClient:
         empty = msg.pop(0)
         assert empty == b''
         command = msg.pop(0)
-
+        ident = msg.pop(0)
         server = msg.pop(0)
         answ = pickle.loads(msg[0])
         return answ
@@ -188,10 +189,15 @@ class QWeatherClient:
     def __repr__(self):
         #self.get_server_info()
         msg = ""
-        lst = [getattr(self,server) for server in dir(self) if getattr(getattr(self,server),'is_remote_server',False)]
-        if len(lst) == 0:
+        if len(self.serverlist) == 0:
             return 'No servers connected'
         else:
-            for aserver in lst:
+            for aserver in self.serverlist:
                 msg += aserver.name + "\n"
         return msg.strip()
+
+    def __iter__(self):
+        return (aserv for aserv in self.serverlist)
+
+    def __getitem__(self,key):
+        return self.serverlist[key]
