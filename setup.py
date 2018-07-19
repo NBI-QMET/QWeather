@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='QWeather',
-    version='1.0.4a',
+    version='1.0.5',
     packages=['qweather',],
     author='A. Arvad Joergensen',
     author_email='Asbjorn.Arvad@nbi.ku.dk',
