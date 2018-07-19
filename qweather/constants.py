@@ -10,6 +10,3 @@ CDISCONNECT = '4'.encode()
 CFAIL = '00'.encode()
 CSUCCESS = '11'.encode()
 
-CHEARTBEAT = '42'.encode()
-
-HEARTBEATMAX = 5

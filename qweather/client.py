@@ -52,6 +52,7 @@ class QWeatherClient:
             name = socket.gethostname()
         self.name = name.encode()
         self.reconnect()
+        self.ping_broker()
         self.loop.run_until_complete(self.get_server_info())
         self.running = False
         self.messageid = 0
@@ -65,14 +66,11 @@ class QWeatherClient:
             self.poller.unregister(self.socket)
         if self.socket: 
             self.socket.close()
-        if self.context:
-            self.context.term()
         self.context = Context()
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.connect(self.QWeatherStationIP)
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
-        #lol = asyncio.ensure_future()
         
     
     async def get_server_info(self):
@@ -93,13 +91,6 @@ class QWeatherClient:
                 server.is_remote_server = True
                 setattr(self,name,server)
                 self.serverlist.append(server)
-            
-
-#                _method = 
- #               _method = methodclass(self.send_request,server.name,amethod[0],amethod[1])
-  #              _method.is_remote_server_method = True
-   #             setattr(server,amethod[0],_method)
-        #print('loaded servers')
         return None
 
     def send_request(self,body):
@@ -111,6 +102,26 @@ class QWeatherClient:
         else:
             result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
         return result
+
+    def ping_broker(self):
+        pass
+        '''
+        self.send_message([b'',b'P'])
+        try:
+            if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the server
+                raise Exception('QWeatherStation not found')
+            else:
+                msg =  self.loop.run_until_complete(self.socket.recv_multipart())
+                empty = msg.pop(0)
+                pong = msg.pop(0)
+                if pong != b'b':
+                    raise Exception('QWeatherStation sent wrong Pong')              
+
+        except Exception as e:
+            self.poller.unregister(self.socket)
+            self.socket.close()
+            raise e
+        '''
 
     def sync_send_request(self,body,ident):
         msg = [b'',b'C',CREQUEST,ident]  + body
@@ -154,7 +165,6 @@ class QWeatherClient:
 
     async def run(self):
         self.running = True
-        tic = time.time()
         while True:
             try:
                 items = await self.poller.poll(1000)
@@ -173,16 +183,13 @@ class QWeatherClient:
                         server = msg.pop(0)
                         self.futureobjectdict[messageid+server].set_exception(Exception(msg.pop(0)))
 
-                    #print(msg)
-                toc = time.time()
-                if toc-tic > 30:
-                    answ = [b'',b'H',self.name]
-                    self.send_message(answ)    
-                    tic = toc
             except KeyboardInterrupt:
+                self.close()
                 break
-                #self.socket.close()
-                #self.context.term()
+    
+    def close(self):
+        self.poller.unregister(self.socket)
+        self.socket.close()
 
 
 

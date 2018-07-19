@@ -15,45 +15,61 @@ class QWeatherServer:
             print('Connecting "',self.servername,'" to QWeatherStation on IP "',self.QWeatherStationIP,'"\n')
         self.servername = self.servername.encode()
         self.context = zmq.Context()
-        self.QWeatherStation = self.context.socket(zmq.DEALER)
-        self.QWeatherStation.connect(self.QWeatherStationIP)
+        self.socket = self.context.socket(zmq.DEALER)
+        self.socket.connect(self.QWeatherStationIP)
+        self.poller = zmq.Poller()
+        self.poller.register(self.socket,zmq.POLLIN)
+        self.ping_broker()
         if self.verbose:
             print('Connection established\n')
 
 #        self.broadcastsocket = self.context.socket(zmq.PUB)
  #       self.broadcastsocket.connect(broadcastsocket)
 
-        self.poller = zmq.Poller()
-        self.poller.register(self.QWeatherStation,zmq.POLLIN)
 
         self.methoddict = {func:getattr(self,func) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)}
         self.register_at_station()
 
+    def ping_broker(self):
+        self.send_message([b'',b'P'])
+        try:
+            if len(self.poller.poll(timeout=2000)) == 0: #wait 2 seconds for a ping from the server
+                raise Exception('QWeatherStation not found')
+            else:
+                msg = self.socket.recv_multipart()
+                empty = msg.pop(0)
+                pong = msg.pop(0)
+                if self.debug:
+                    print('Recieved Pong: ',pong)
+                if pong != b'b':
+                    raise Exception('QWeatherStation sent wrong Pong')              
+
+        except Exception as e:
+            self.poller.unregister(self.socket)
+            self.socket.close()
+            raise e
 
     def register_at_station(self):
-        methodlist = [(func,getattr(self,func).__doc__) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)]
-        msg = [b'',b'S',CREADY,PSERVER,self.servername,pickle.dumps(methodlist)]
+        self.methodlist = [(func,getattr(self,func).__doc__) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)]
+        msg = [b'',b'S',CREADY,PSERVER,self.servername,pickle.dumps(self.methodlist)]
         if self.debug:
             print('DEBUG: To QWeatherStation: ',msg)
-        self.QWeatherStation.send_multipart(msg)
+        self.send_message(msg)
 
     def run(self):
-        #Broadcast method information
-        tic = time.time()
         while True:
             try:
                 items = self.poller.poll(1000)
                 if items:
-                    msg = self.QWeatherStation.recv_multipart()
+                    msg = self.socket.recv_multipart()
                     self.handle_messages(msg)
-                toc = time.time()
-                if toc-tic > 30:
-                    answ = [b'',b'H',self.servername]
-                    self.QWeatherStation.send_multipart(answ)    
-                    tic = toc
             except KeyboardInterrupt:
+                self.close()
                 break
 
+    def close(self):
+        self.poller.unregister(self.socket)
+        self.socket.close()
 
     def handle_messages(self,msg):
         if self.debug:
@@ -73,15 +89,19 @@ class QWeatherServer:
             answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
             if self.debug:
                 print('DEBUG: To QWeatherStation: ', answ)
-            self.QWeatherStation.send_multipart(answ)        
+            self.send_message(answ)        
 
         elif command == CREADY+CSUCCESS:
             if self.verbose:
-                print('\nMethods registered at QWeatherStation. (',[i[0] for i in methodlist],')')
+                print('\nMethods registered at QWeatherStation. (',[i[0] for i in self.methodlist],')')
 
         elif command == CREADY+CFAIL:
             raise Exception(msg.pop(0).decode())
         #if command == 
+
+    def send_message(self,msg):
+        self.socket.send_multipart(msg)
+        
 
         
 

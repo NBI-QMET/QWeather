@@ -25,10 +25,6 @@ class BrokerGui(QWidget):
         refreshbutton = QPushButton('Refresh')
         messagebox = QLineEdit()
         layout = QVBoxLayout()
-#        toplayout = QHBoxLayout()
-        #toplayout.addWidget(IPlabel)
-        #toplayout.Stretch()
-        #toplayout.addWidget(refreshbutton)
 
 
         layout.addWidget(IPlabel)
