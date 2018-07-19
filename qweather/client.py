@@ -17,12 +17,18 @@ class QWeatherClient:
 
         def bindingfunc(self,methodname,methoddoc):
             def func(*args,**kwargs):
-                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                wait = kwargs.pop('wait',True)
+                if wait:
+                    return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                else:
+                    self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],wait=False)
+                    return None
+
+
             func.__name__ = methodname
             func.__doc__ = methoddoc
             func.is_remote_server_method = True
             return func
-
 
         def __repr__(self):
             msg = ""
@@ -33,6 +39,7 @@ class QWeatherClient:
                 for amethod in lst:
                     msg += amethod.__name__ +"\n"
             return msg.strip()
+
     
 
     context = None
@@ -93,16 +100,6 @@ class QWeatherClient:
                 self.serverlist.append(server)
         return None
 
-    def send_request(self,body):
-        self.messageid+=1
-        if self.messageid > 255:
-            self.messageid = 0
-        if self.running:
-            result =  asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
-        else:
-            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
-        return result
-
     def ping_broker(self):
         pass
         '''
@@ -123,45 +120,50 @@ class QWeatherClient:
             raise e
         '''
 
-    def sync_send_request(self,body,ident):
+    def send_request(self,body,wait=True):
+        self.messageid+=1
+        if self.messageid > 255:
+            self.messageid = 0
+        if wait:
+            if self.running:
+                result =  asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
+            else:
+                result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
+            return result
+        else:
+            #self.sync_send_request(body,self.messageid.to_bytes(1,'big'),wait=False)
+            asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
+
+    def sync_send_request(self,body,ident,wait=False):
         msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)
-        msg = self.loop.run_until_complete(self.socket.recv_multipart())
-        empty = msg.pop(0)
-        assert empty == b''
-        command = msg.pop(0)
-        ident = msg.pop(0)
-        server = msg.pop(0)
-        answ = pickle.loads(msg[0])
-        return answ
+        if wait:
+            msg = self.loop.run_until_complete(self.socket.recv_multipart())
+            empty = msg.pop(0)
+            assert empty == b''
+            command = msg.pop(0)
+            ident = msg.pop(0)
+            server = msg.pop(0)
+            answ = pickle.loads(msg[0])
+            return answ
     
     async def async_send_request(self,body,ident):
         server = body[0]
         msg = [b'',b'C',CREQUEST,ident]  + body
-
-
         self.send_message(msg)
         answ = await self.recieve_message(ident+server)
         self.futureobjectdict.pop(ident+server)
         return answ
-       # return msg
 
     def send_message(self,msg):
-        #self.loop.create_task(self.socket.send_multipart(msg))
         self.socket.send_multipart(msg)
 
 
     def recieve_message(self,ident):
         tmp = self.loop.create_future()
         self.futureobjectdict[ident] = tmp
-        #print('went here')
         return tmp
-
-        #ans =self.loop.create_task(self.socket.recv_multipart())
-
-#        ans = await self.socket.recv_multipart()
-  #      return ans
 
     async def run(self):
         self.running = True
@@ -194,7 +196,6 @@ class QWeatherClient:
 
 
     def __repr__(self):
-        #self.get_server_info()
         msg = ""
         if len(self.serverlist) == 0:
             return 'No servers connected'

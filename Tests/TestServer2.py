@@ -29,6 +29,16 @@ class Server(QWeatherServer):
         else:
             return a*b
 
+    @QMethod
+    def long_operation(self,delaytime):
+        '''Delays for a number of seconds specified by delaytime'''
+        print('Operation Recieved')
+        time.sleep(delaytime)
+        response ='TestServer2 is done'
+        print(response)
+        return response
+
+
 
 
 if __name__ == "__main__":
