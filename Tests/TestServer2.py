@@ -9,7 +9,7 @@ class Server(QWeatherServer):
     def __init__(self):
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer2'
-        self.verbose = False
+        self.verbose = True
         self.debug = False
         self.initialize_sockets()
 
@@ -36,7 +36,7 @@ class Server(QWeatherServer):
         time.sleep(delaytime)
         response ='TestServer2 is done'
         print(response)
-        return response
+       # return response
 
 
 

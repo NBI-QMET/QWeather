@@ -10,7 +10,7 @@ class Server(QWeatherServer):
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer'
         self.verbose = True
-        self.debug = True
+        self.debug = False
         self.initialize_sockets()
 
     @QMethod
@@ -35,7 +35,7 @@ class Server(QWeatherServer):
         time.sleep(delaytime)
         response ='Testserver1 is done'
         print(response)
-        return response
+        #return response
 
 
 

@@ -18,11 +18,17 @@ class QWeatherClient:
         def bindingfunc(self,methodname,methoddoc):
             def func(*args,**kwargs):
                 wait = kwargs.pop('wait',True)
-                if wait:
-                    return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
-                else:
-                    self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],wait=False)
-                    return None
+                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                #if wait:
+                #    print('waiting')
+                #    print(kwargs)
+                #    result = self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                #    print(result)
+                #    return result#self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                #else:
+                #    print('nonwaiting')
+                #    self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],wait=False)
+                #    return 'lol'
 
 
             func.__name__ = methodname
@@ -134,7 +140,7 @@ class QWeatherClient:
             self.sync_send_request(body,self.messageid.to_bytes(1,'big'),wait=False)
             #asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
 
-    def sync_send_request(self,body,ident,wait=False):
+    def sync_send_request(self,body,ident,wait=True):
         msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)

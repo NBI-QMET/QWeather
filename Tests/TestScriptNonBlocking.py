@@ -19,8 +19,9 @@ T1 = client.TestServer
 T2 = client.TestServer2
 tic = time.time()
 T1.long_operation(2,wait=False)
-T2.long_operation(3,wait=True)
+#T2.long_operation(3,wait=False)
 print('took: ',time.time()-tic,'s to complete')
+print('got a number:',T2.get_number())
 
 
 
