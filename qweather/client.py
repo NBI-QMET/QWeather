@@ -131,8 +131,8 @@ class QWeatherClient:
                 result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
             return result
         else:
-            #self.sync_send_request(body,self.messageid.to_bytes(1,'big'),wait=False)
-            asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
+            self.sync_send_request(body,self.messageid.to_bytes(1,'big'),wait=False)
+            #asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
 
     def sync_send_request(self,body,ident,wait=False):
         msg = [b'',b'C',CREQUEST,ident]  + body
