@@ -4,19 +4,24 @@ import pickle
 import time
 #from zmq.asyncio import Context, Poller
 
+
 class QWeatherStation:
 
     def __init__(self,IP,loop = None,verbose=False,debug = False):
         if loop is None:
-            from zmq import Context,Poller
-        else:
+            #from zmq import Context,Poller
+            import asyncio
             from zmq.asyncio import Context,Poller
+            self.loop = asyncio.get_event_loop()
+        else:
+            self.loop = loop
         self.StationIP = IP
         self.verbose = verbose
         self.debug = debug
         self.servers = {}
         self.clients = {}
         self.pinged = []
+        self.requestlist = {}
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.poller = Poller()
@@ -32,7 +37,7 @@ class QWeatherStation:
                 items = await self.poller.poll(1000)
             except KeyboardInterrupt:
                 self.close()
-                break
+                brea
 
             if items:
                 msg = await self.socket.recv_multipart()
@@ -41,6 +46,8 @@ class QWeatherStation:
           
 
     def run(self):
+        self.loop.run_until_complete(self.async_run())
+        '''
         while True:
             try:
                 items = self.poller.poll(1000)
@@ -50,6 +57,7 @@ class QWeatherStation:
             if items:
                 msg = self.socket.recv_multipart()
                 self.handle_message(msg)
+        '''
 
     def close(self):
         self.poller.unregister(self.socket)
@@ -115,6 +123,7 @@ class QWeatherStation:
             messageid = msg.pop(0)
             server = msg.pop(0).decode()
             serveraddr = self.servers[server][0]
+            self.requestlist[messageid+sender] = self.loop.call_later(CTIMEOUT, self.socket.send_multipart,[sender,b'',CREQUEST + CFAIL,messageid,server.encode(),pickle.dumps((Exception('Timeout error')))])
             msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
             if len(self.servers[server][2]) ==  0:
                 self.socket.send_multipart(msg)
@@ -145,13 +154,20 @@ class QWeatherStation:
             client = msg.pop(0)
             answ = msg.pop(0)
             msg = [client,b'',CREQUEST + CSUCCESS,messageid,server.encode(),answ]
-            self.socket.send_multipart(msg)
-            if self.debug:
-                print('DEBUG(QWeatherStation): To "',client,'":\n',msg,'\n\n')
-            if len(self.servers[server][2]) > 0:
-                self.socket.send_multipart(self.servers[server][2].pop(0))
+            try:
+                timeouttask = self.requestlist.pop(messageid+client)
+                timeouttask.cancel()
+                self.socket.send_multipart(msg)
                 if self.debug:
-                    print('DEBUG(QWeatherStation): CLient request at"',self.clients[sender],'":\n',msg,'\n\n')
+                    print('DEBUG(QWeatherStation): To "',client,'":\n',msg,'\n\n')
+                if len(self.servers[server][2]) > 0:
+                    self.socket.send_multipart(self.servers[server][2].pop(0))
+                    if self.debug:
+                        print('DEBUG(QWeatherStation): Server answer to"',self.clients[sender],'":\n',msg,'\n\n')
+            except KeyError:
+                pass
+
+
 
     def ping(self):
         self.pinged = []

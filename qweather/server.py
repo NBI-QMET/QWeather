@@ -89,7 +89,11 @@ class QWeatherServer:
             args,kwargs = pickle.loads(msg.pop(0))
             if self.debug:
                 print('DEBUG(',self.servername.decode(),'): Calling function:\n',fnc,' with arguments:\n',args,kwargs,'\n\n')
-            answ = self.methoddict[fnc](*args,**kwargs)
+            try:
+                answ = self.methoddict[fnc](*args,**kwargs)
+            except Exception as e:
+                answ = Exception('Server crashed')
+                
             answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
             if self.debug:
                 print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n', answ,'\n\n')

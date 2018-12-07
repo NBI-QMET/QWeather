@@ -9,15 +9,15 @@ class Server(QWeatherServer):
     def __init__(self):
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer2'
-        self.verbose = False
-        self.debug = True
+        self.verbose = True
+        self.debug = False
         self.initialize_sockets()
 
     @QMethod
     def get_number(self,offset = 0):
         """Return a numper upon request"""
 #        socket.send(b"%f" % np.random.rand())
-        time.sleep(2)
+        hello
         num = (np.random.rand()+offset)
         return num
 

@@ -12,3 +12,5 @@ CSUCCESS = '11'.encode()
 
 CPING = '99'.encode()
 
+CTIMEOUT = 2 # timeout for client requests, in seconds
+
