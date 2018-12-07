@@ -40,7 +40,7 @@ class QWeatherClient:
     poller = None
     futureobjectdict = {}
 
-    def __init__(self,QWeatherStationIP,name = None,loop = None):
+    def __init__(self,QWeatherStationIP,name = None,loop = None,debug=False,verbose=False):
         self.QWeatherStationIP = QWeatherStationIP
         if loop is None:
             self.loop = asyncio.get_event_loop()
@@ -50,6 +50,8 @@ class QWeatherClient:
         if name is None:
             import socket
             name = socket.gethostname()
+        self.debug = debug
+        self.verbose = verbose
         self.name = name.encode()
         self.reconnect()
         self.ping_broker()
@@ -104,8 +106,7 @@ class QWeatherClient:
         return result
 
     def ping_broker(self):
-        pass
-        '''
+        
         self.send_message([b'',b'P'])
         try:
             if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the server
@@ -114,6 +115,8 @@ class QWeatherClient:
                 msg =  self.loop.run_until_complete(self.socket.recv_multipart())
                 empty = msg.pop(0)
                 pong = msg.pop(0)
+                if self.debug:
+                    print('DEBUG(',self.name.decode(),'): Recieved Pong: ',pong,'\n\n')
                 if pong != b'b':
                     raise Exception('QWeatherStation sent wrong Pong')              
 
@@ -121,7 +124,7 @@ class QWeatherClient:
             self.poller.unregister(self.socket)
             self.socket.close()
             raise e
-        '''
+        
 
     def sync_send_request(self,body,ident):
         msg = [b'',b'C',CREQUEST,ident]  + body
@@ -182,6 +185,15 @@ class QWeatherClient:
                         messageid = msg.pop(0)
                         server = msg.pop(0)
                         self.futureobjectdict[messageid+server].set_exception(Exception(msg.pop(0)))
+                    elif command == CPING:
+                        ping = msg.pop(0)
+                        if ping != b'P':
+                            raise Exception('QWeatherStation sent wrong ping')
+                        if self.debug:
+                            print('DEBUG(',self.name.decode(),': Recieved Ping from QWeatherStation','\n\n')
+                        self.send_message([b'',b'b'])
+
+
 
             except KeyboardInterrupt:
                 self.close()

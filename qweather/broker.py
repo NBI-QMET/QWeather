@@ -15,7 +15,8 @@ class QWeatherStation:
         self.verbose = verbose
         self.debug = debug
         self.servers = {}
-        self.clients = []
+        self.clients = {}
+        self.pinged = []
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.poller = Poller()
@@ -27,6 +28,7 @@ class QWeatherStation:
     async def async_run(self):
         while True:
             try:
+                print('polling')
                 items = await self.poller.poll(1000)
             except KeyboardInterrupt:
                 self.close()
@@ -54,9 +56,13 @@ class QWeatherStation:
         self.socket.close()
 
     def handle_message(self,msg):
+        print(msg)
         sender = msg.pop(0)
         if self.debug:
-            print('DEBUG: From "',sender,'": ',msg)
+            if sender in self.clients.keys():
+                print('DEBUG(QWeatherStation): Recieved message from "',self.clients[sender],'":\n',msg,'\n\n')    
+            else:
+                print('DEBUG(QWeatherStation): Recieved message from "',sender,'":\n',msg,'\n\n')
         empty = msg.pop(0)
         assert empty == b''
         SenderType = msg.pop(0)
@@ -67,11 +73,24 @@ class QWeatherStation:
             command = msg.pop(0) # 0xF? for server and 0x0? for client
             self.process_client(sender,command,msg)
 
-
         elif SenderType == b'P': #Ping
             if self.debug:
-                print('Recieved Ping from ',sender)
-            self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong            
+                if sender in self.clients.keys():
+                    print('DEBUG(QWeatherStation): Recieved Ping from ',self.clients[sender],'\n\n')
+                else:
+                    print('DEBUG(QWeatherStation): Recieved Ping from ',sender,'\n\n')
+
+            self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
+
+        elif SenderType ==b'b': #Pong
+            print('got a pong')
+            if self.debug:
+                print('DEBUG(QWeatherStation): Recieved Pong from ',sender,'\n\n')
+            print(sender,self.pinged,sender in self.pinged)
+            if sender in self.pinged:
+                print('before',self.pinged)
+                self.pinged.remove(sender)
+                print('after',self.pinged)
 
         else:
             if self.verbose:
@@ -85,11 +104,11 @@ class QWeatherStation:
             else:
                 newmsg = [sender,b'',CREADY + CSUCCESS] + [pickle.dumps(self.servers)]
 
+                name = msg.pop(0).decode()
+                if name not in self.clients.keys():
+                    self.clients[sender] = name
                 if self.verbose:
-                    print('Client ready at "',int.from_bytes(sender,byteorder='big'),'"')
-                name = msg.pop(0)
-                if name.decode() not in self.clients:
-                    self.clients.append(name.decode())
+                    print('Client ready at "',int.from_bytes(sender,byteorder='big'),self.clients[sender],'"')
             self.socket.send_multipart(newmsg)
 
         elif command == CREQUEST:
@@ -100,7 +119,7 @@ class QWeatherStation:
             if len(self.servers[server][2]) ==  0:
                 self.socket.send_multipart(msg)
                 if self.debug:
-                    print('DEBUG: CLient request at"',sender,'":',msg)
+                    print('DEBUG(QWeatherStation): Client request at"',self.clients[sender],'":\n',msg,'\n\n')
             else:
                 self.servers[server][2].append(msg)
 
@@ -117,7 +136,7 @@ class QWeatherStation:
                 self.servers[servername] = (sender,servermethods,[])
                 newmsg = [sender,b'',CREADY + CSUCCESS]
                 if self.verbose:
-                    print('Server "',servername,'" ready at: "',int.from_bytes(sender,byteorder='big'),'"')
+                    print('Server "',servername,'" ready at: "',int.from_bytes(sender,byteorder='big'),servername,'"')
             self.socket.send_multipart(newmsg)
 
         elif command == CREPLY:
@@ -128,9 +147,31 @@ class QWeatherStation:
             msg = [client,b'',CREQUEST + CSUCCESS,messageid,server.encode(),answ]
             self.socket.send_multipart(msg)
             if self.debug:
-                print('DEBUG: To "',client,'"',msg)
+                print('DEBUG(QWeatherStation): To "',client,'":\n',msg,'\n\n')
             if len(self.servers[server][2]) > 0:
                 self.socket.send_multipart(self.servers[server][2].pop(0))
                 if self.debug:
-                    print('DEBUG: CLient request at"',sender,'":',msg)
+                    print('DEBUG(QWeatherStation): CLient request at"',self.clients[sender],'":\n',msg,'\n\n')
 
+    def ping(self):
+        self.pinged = []
+        for aserver in self.servers.values():
+            addresse = aserver[0]
+            self.socket.send_multipart([addresse,b'',CPING,b'P'])
+            self.pinged.append(addresse)
+
+        for aclient in self.clients.keys():
+            self.socket.send_multipart([aclient,b'',CPING,b'P'])
+            self.pinged.append(aclient)
+
+    def check_ping(self):
+        for aping in self.pinged:
+            if aping in self.clients.keys():
+                del self.clients[aping]
+            for aname,aserver in self.servers.items():
+                if aping == aserver[0]:
+                    break
+            del self.servers[aname]
+        print('servers:',self.servers)
+#        print(self.pinged)
+        self.pinged = []

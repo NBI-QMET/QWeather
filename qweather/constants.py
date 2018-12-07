@@ -10,3 +10,5 @@ CDISCONNECT = '4'.encode()
 CFAIL = '00'.encode()
 CSUCCESS = '11'.encode()
 
+CPING = '99'.encode()
+

@@ -2,6 +2,8 @@ from .constants import *
 import zmq
 import pickle
 import time
+
+
 def QMethod(func):
     '''Decorator for exposing methods that can be called by clients'''
     func.is_client_accessible = True
@@ -31,16 +33,18 @@ class QWeatherServer:
         self.register_at_station()
 
     def ping_broker(self):
+        if self.debug:
+            print('DEBUG(',self.servername.decode(),'): Sending ping:\n',[b'P'],'\n\n')
         self.send_message([b'',b'P'])
         try:
-            if len(self.poller.poll(timeout=2000)) == 0: #wait 2 seconds for a ping from the server
+            if len(self.poller.poll(timeout=5000)) == 0: #wait 2 seconds for a ping from the server
                 raise Exception('QWeatherStation not found')
             else:
                 msg = self.socket.recv_multipart()
                 empty = msg.pop(0)
                 pong = msg.pop(0)
                 if self.debug:
-                    print('Recieved Pong: ',pong)
+                    print('DEBUG(',self.servername.decode(),'): Recieved Pong: ',pong,'\n\n')
                 if pong != b'b':
                     raise Exception('QWeatherStation sent wrong Pong')              
 
@@ -53,7 +57,7 @@ class QWeatherServer:
         self.methodlist = [(func,getattr(self,func).__doc__) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)]
         msg = [b'',b'S',CREADY,PSERVER,self.servername,pickle.dumps(self.methodlist)]
         if self.debug:
-            print('DEBUG: To QWeatherStation: ',msg)
+            print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n',msg,'\n\n')
         self.send_message(msg)
 
     def run(self):
@@ -73,7 +77,7 @@ class QWeatherServer:
 
     def handle_messages(self,msg):
         if self.debug:
-            print('DEBUG: From QWeatherStation: ',msg)
+            print('DEBUG(',self.servername.decode(),'): From QWeatherStation:\n',msg,'\n\n')
         empty = msg.pop(0)
         assert empty == b''
         command = msg.pop(0)
@@ -84,11 +88,11 @@ class QWeatherServer:
             fnc = msg.pop(0).decode()
             args,kwargs = pickle.loads(msg.pop(0))
             if self.debug:
-                print('DEBUG: Calling function: ',fnc,' with arguments: ',args,kwargs)
+                print('DEBUG(',self.servername.decode(),'): Calling function:\n',fnc,' with arguments:\n',args,kwargs,'\n\n')
             answ = self.methoddict[fnc](*args,**kwargs)
             answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
             if self.debug:
-                print('DEBUG: To QWeatherStation: ', answ)
+                print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n', answ,'\n\n')
             self.send_message(answ)        
 
         elif command == CREADY+CSUCCESS:
@@ -97,7 +101,14 @@ class QWeatherServer:
 
         elif command == CREADY+CFAIL:
             raise Exception(msg.pop(0).decode())
-        #if command == 
+
+        elif command == CPING:
+            ping = msg.pop(0)
+            if ping != b'P':
+                raise Exception('QWeatherStation sent wrong ping')
+            if self.debug:
+                print('DEBUG(',self.servername.decode(),': Recieved Ping from QWeatherStation','\n\n')
+            self.send_message([b'',b'b'])
 
     def send_message(self,msg):
         self.socket.send_multipart(msg)
@@ -107,4 +118,4 @@ class QWeatherServer:
 
     def initialize_broadcasting(self):
         if self.debug:
-            print('DEBUG: Initializing broadcasting')
+            print('DEBUG(',self.servername.decode(),'): Initializing broadcasting')

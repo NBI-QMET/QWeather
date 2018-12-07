@@ -29,6 +29,10 @@ class Server(QWeatherServer):
         else:
             return a*b
 
+    @QMethod
+    def ping(self):
+        self.ping_broker()
+
 
 
 if __name__ == "__main__":

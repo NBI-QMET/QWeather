@@ -10,7 +10,7 @@ class Server(QWeatherServer):
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer2'
         self.verbose = False
-        self.debug = False
+        self.debug = True
         self.initialize_sockets()
 
     @QMethod
@@ -29,7 +29,9 @@ class Server(QWeatherServer):
         else:
             return a*b
 
-
+    @QMethod
+    def ping(self):
+        self.ping_broker()
 
 if __name__ == "__main__":
     server = Server()

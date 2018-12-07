@@ -6,23 +6,24 @@ import qweather
 import cProfile, pstats, io
 pr = cProfile.Profile()
 
-#procBroker = subprocess.Popen(['python', 'TestBroker.py'])
+procBroker = subprocess.Popen(['python', 'TestBroker.py'])
 time.sleep(1)
 procServer1 = subprocess.Popen(['python', 'TestServer.py'])
 time.sleep(1)
 procServer2 = subprocess.Popen(['python', 'TestServer2.py'])
-time.sleep(1)
+time.sleep(2)
 
-brokerconn = "tcp://localhost:5559"	
-client = qweather.QWeatherClient(brokerconn,'testclient',debug=True)
+brokerconn = "tcp://localhost:5559"
+client = qweather.QWeatherClient(brokerconn,'testclient')
 T1 = client.TestServer
-pr.enable()
-for i in range(2):
-	print(T1.get_number())
+T2 = client.TestServer2
+tic = time.time()
+T1.long_operation(2,wait=False)
+T2.long_operation(3,wait=False)
+print('took: ',time.time()-tic,'s to complete')
+print('got a number:',T2.get_number())
 
-pr.disable()
-client.ping_broker()
-T1.ping()
+
 
 #s = io.StringIO()
 #sortby = 'cumulative'
