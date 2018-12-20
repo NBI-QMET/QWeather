@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import *
 from PyQt5 import QtGui
+from PyQt5.QtCore import pyqtSlot
 import asyncio
 import sys
 sys.path.append('../')
@@ -16,7 +17,7 @@ class testgui(QWidget):
         self.initialize()
         brokerconn = "tcp://localhost:5559"
         self.client = QWeatherClient(brokerconn,loop = loop,name='testgui')
-        self.client.subscribe('TestServer')
+        self.client.subscribe('TestServer',self.print_message)
         self.loop = loop
         self.loop.create_task(self.client.run())
 
@@ -36,11 +37,12 @@ class testgui(QWidget):
         self.setLayout(layout)
         self.show()
 
+    def print_message(self,msg):
+        print('msg> ', msg)
 
     async def send_command(self,func):
         a = await func
-        print(a)
-
+        
     def closeEvent(self,e):
         self.loop.stop()
 

@@ -5,6 +5,7 @@ from zmq.asyncio import Context, Poller
 import re
 import asyncio
 import time
+from PyQt5.QtCore import pyqtSignal
 class QWeatherClient:
 
     class serverclass:
@@ -85,11 +86,13 @@ class QWeatherClient:
         self.poller.register(self.socket,zmq.POLLIN)
         self.poller.register(self.subsocket,zmq.POLLIN)
 
-    def subscribe(self,servername):
+    def subscribe(self,servername,function):
         self.subsocket.setsockopt(zmq.SUBSCRIBE,servername.encode())
+        self.subscribers[servername] = function
 
     def unsubscribe(self,servername):
         self.subsocket.setsockopt(zmq.UNSUBSCRIBE,servername.encode())
+        self.subscribers.pop(servername)
         
     
     async def get_server_info(self):
@@ -100,6 +103,7 @@ class QWeatherClient:
         assert empty == b''
         command = msg.pop(0)
         self.serverlist = []
+        self.subscribers = {}
         if command == CREADY + CFAIL:
             raise Exception(msg.pop(0).decode())
         else:
@@ -213,7 +217,9 @@ class QWeatherClient:
 
                 elif self.subsocket in socks:
                     msg = await self.subsocket.recv_multipart()
-                    print(msg)
+                    server= msg.pop(0).decode()
+                    msg = pickle.loads(msg.pop(0))
+                    self.subscribers[server](msg)
 
 
 

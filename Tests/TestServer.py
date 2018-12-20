@@ -38,10 +38,9 @@ class Server(QWeatherServer):
     @QMethod
     def do_something_scheduled(self):
         for i in range(10):
-            num = np.random.rand()
+            num = np.random.rand(5)
             print('broadcasting ',num)
             self.broadcast(num)
-            print('broadcasted ',num)
 
 
 
