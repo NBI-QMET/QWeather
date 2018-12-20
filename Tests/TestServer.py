@@ -3,13 +3,15 @@ sys.path.append('../')
 import time
 import numpy as np
 from qweather import QWeatherServer, QMethod
+import asyncio
 
 class Server(QWeatherServer):
 
     def __init__(self):
+        super().__init__()
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer'
-        self.verbose = True
+        self.verbose = False
         self.debug = False
         self.initialize_sockets()
 
@@ -32,6 +34,14 @@ class Server(QWeatherServer):
     @QMethod
     def ping(self):
         self.ping_broker()
+
+    @QMethod
+    def do_something_scheduled(self):
+        for i in range(10):
+            num = np.random.rand()
+            print('broadcasting ',num)
+            self.broadcast(num)
+            print('broadcasted ',num)
 
 
 

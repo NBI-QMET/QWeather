@@ -1,6 +1,5 @@
 from PyQt5.QtWidgets import *
 from PyQt5 import QtGui
-from quamash import QEventLoop, QThreadExecutor
 import asyncio
 import sys
 sys.path.append('../')
@@ -16,7 +15,8 @@ class testgui(QWidget):
 
         self.initialize()
         brokerconn = "tcp://localhost:5559"
-        self.client = QWeatherClient(brokerconn,loop)
+        self.client = QWeatherClient(brokerconn,loop = loop,name='testgui')
+        self.client.subscribe('TestServer')
         self.loop = loop
         self.loop.create_task(self.client.run())
 
@@ -31,34 +31,23 @@ class testgui(QWidget):
         layout.addWidget(sendbutton2)
         layout.addWidget(l2)
 
-        sendbutton.pressed.connect(lambda : self.send_command(self.client.TestServer.get_number(),l1))
-        sendbutton2.pressed.connect(lambda : self.send_command(self.client.TestServer2.get_number(),l2))
+        sendbutton.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.TestServer.do_something_scheduled())))
+        sendbutton2.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.TestServer2.get_number(),l2)))
         self.setLayout(layout)
         self.show()
 
 
-    def send_command(self,func,label):
-        try:
-            self.loop.create_task(self.blocking_call(func,label))
-        except Exception as e:
-            print(e)
-#       yield ans
-        #print(ans)
+    async def send_command(self,func):
+        a = await func
+        print(a)
 
-    async def blocking_call(self,func,label):
-        try:
-            a = await func 
-            print(a)
-            label.setText('{:f}'.format(float(a)))
-        except Exception as e:
-            print(e)
-        
-#        return a
+    def closeEvent(self,e):
+        self.loop.stop()
 
 
 async def process_events(qapp):
     while True:
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.1)
         qapp.processEvents()
 
 

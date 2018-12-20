@@ -14,3 +14,8 @@ CPING = '99'.encode()
 
 CTIMEOUT = 2 # timeout for client requests, in seconds
 
+IPREPATTERN = ('(.*[0-9*t]):(.*[0-9])')
+
+PUBLISHSOCKET = 2
+SUBSOCKET = 1
+

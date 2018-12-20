@@ -19,7 +19,7 @@ procServer2 = subprocess.Popen(['python', 'TestServer2.py'])
 time.sleep(0.3)
 brokerconn = "tcp://localhost:5559"
 
-client  = qweather.QWeatherClient(brokerconn,debug=True)
+client  = qweather.QWeatherClient(brokerconn,debug=False)
 loop = client.loop
 loop.create_task(client.run())
 

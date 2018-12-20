@@ -2,6 +2,7 @@ from .constants import *
 import zmq
 import pickle
 import time
+import re
 
 
 def QMethod(func):
@@ -11,6 +12,10 @@ def QMethod(func):
 
 
 class QWeatherServer:
+
+    def __init__(self):
+        pass
+
     def initialize_sockets(self):
         if self.verbose:
             print('#########')
@@ -18,15 +23,22 @@ class QWeatherServer:
         self.servername = self.servername.encode()
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.DEALER)
-        self.socket.connect(self.QWeatherStationIP)
+
+        IpAndPort = re.search(IPREPATTERN,self.QWeatherStationIP)
+        assert IpAndPort != None, 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+        self.QWeatherStationIP = IpAndPort.group(1)
+        self.QWeatherStationSocket = IpAndPort.group(2)
+        assert self.QWeatherStationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+        assert len(self.QWeatherStationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+        
+        self.socket.connect(self.QWeatherStationIP + ':' + self.QWeatherStationSocket)
+        self.pubsocket = self.context.socket(zmq.PUB)
+        self.pubsocket.connect(self.QWeatherStationIP + ':' + str(int(self.QWeatherStationSocket) + PUBLISHSOCKET))
         self.poller = zmq.Poller()
         self.poller.register(self.socket,zmq.POLLIN)
         self.ping_broker()
         if self.verbose:
             print('Connection established\n')
-
-#        self.broadcastsocket = self.context.socket(zmq.PUB)
- #       self.broadcastsocket.connect(broadcastsocket)
 
 
         self.methoddict = {func:getattr(self,func) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)}
@@ -59,6 +71,7 @@ class QWeatherServer:
         if self.debug:
             print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n',msg,'\n\n')
         self.send_message(msg)
+
 
     def run(self):
         while True:
@@ -116,10 +129,7 @@ class QWeatherServer:
 
     def send_message(self,msg):
         self.socket.send_multipart(msg)
-        
 
-        
+    def broadcast(self,msg):
+        self.pubsocket.send_multipart([self.servername, pickle.dumps(msg)])
 
-    def initialize_broadcasting(self):
-        if self.debug:
-            print('DEBUG(',self.servername.decode(),'): Initializing broadcasting')

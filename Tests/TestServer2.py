@@ -7,9 +7,10 @@ from qweather import QWeatherServer, QMethod
 class Server(QWeatherServer):
 
     def __init__(self):
+        super().__init__()
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer2'
-        self.verbose = True
+        self.verbose = False
         self.debug = False
         self.initialize_sockets()
 
@@ -17,7 +18,6 @@ class Server(QWeatherServer):
     def get_number(self,offset = 0):
         """Return a numper upon request"""
 #        socket.send(b"%f" % np.random.rand())
-        hello
         num = (np.random.rand()+offset)
         return num
 

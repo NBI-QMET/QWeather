@@ -1,7 +1,9 @@
 from .constants import *
 import zmq
+from zmq.devices import ThreadProxy
 import pickle
 import time
+import re
 #from zmq.asyncio import Context, Poller
 
 
@@ -15,7 +17,14 @@ class QWeatherStation:
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
-        self.StationIP = IP
+
+        IpAndPort = re.search(IPREPATTERN,IP)
+        assert IpAndPort != None, 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://*:XXXX)'
+        self.StationIP = IpAndPort.group(1)
+        self.StationSocket = IpAndPort.group(2)
+        assert self.StationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://*:XXXX)'
+        assert len(self.StationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://*:XXXX)'
+
         self.verbose = verbose
         self.debug = debug
         self.servers = {}
@@ -24,20 +33,23 @@ class QWeatherStation:
         self.requestlist = {}
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
+        self.socket.bind(self.StationIP + ':' + self.StationSocket)
+        self.proxy = ThreadProxy(zmq.XSUB,zmq.XPUB)
+        self.proxy.bind_in(self.StationIP + ':' + str(int(self.StationSocket) + PUBLISHSOCKET))
+        self.proxy.bind_out(self.StationIP + ':' + str(int(self.StationSocket) + SUBSOCKET))
+        self.proxy.start()
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
-        self.socket.bind(self.StationIP)
         if self.verbose:
             print('QWeatherStation ready to run on IP: "',self.StationIP,'"')
 
     async def async_run(self):
         while True:
             try:
-                print('polling')
                 items = await self.poller.poll(1000)
             except KeyboardInterrupt:
                 self.close()
-                brea
+                break
 
             if items:
                 msg = await self.socket.recv_multipart()
@@ -64,7 +76,6 @@ class QWeatherStation:
         self.socket.close()
 
     def handle_message(self,msg):
-        print(msg)
         sender = msg.pop(0)
         if self.debug:
             if sender in self.clients.keys():

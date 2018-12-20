@@ -6,7 +6,7 @@ import qweather
 import cProfile, pstats, io
 pr = cProfile.Profile()
 
-#procBroker = subprocess.Popen(['python', 'TestBroker.py'])
+procBroker = subprocess.Popen(['python', 'TestBroker.py'])
 time.sleep(1)
 procServer1 = subprocess.Popen(['python', 'TestServer.py'])
 time.sleep(1)
@@ -27,6 +27,15 @@ pr.disable()
 client.ping_broker()
 T1.ping()
 
+client.subscribe('TestServer')
+client.subscribe('TestServer2')
+T1.do_something_scheduled()
+loop = client.loop
+loop.create_task(client.run())
+input('Press enter to stop')
+procBroker.kill()
+procServer1.kill()
+procServer2.kill()
 #s = io.StringIO()
 #sortby = 'cumulative'
 #ps = pstats.Stats(pr, stream=s).sort_stats(sortby)

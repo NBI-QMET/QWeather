@@ -2,6 +2,7 @@ from .constants import *
 import zmq
 import pickle
 from zmq.asyncio import Context, Poller
+import re
 import asyncio
 import time
 class QWeatherClient:
@@ -41,7 +42,13 @@ class QWeatherClient:
     futureobjectdict = {}
 
     def __init__(self,QWeatherStationIP,name = None,loop = None,debug=False,verbose=False):
-        self.QWeatherStationIP = QWeatherStationIP
+        IpAndPort = re.search(IPREPATTERN,QWeatherStationIP)
+        assert IpAndPort != None, 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+        self.QWeatherStationIP = IpAndPort.group(1)
+        self.QWeatherStationSocket = IpAndPort.group(2)
+        assert self.QWeatherStationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+        assert len(self.QWeatherStationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
+
         if loop is None:
             self.loop = asyncio.get_event_loop()
         else:
@@ -70,9 +77,19 @@ class QWeatherClient:
             self.socket.close()
         self.context = Context()
         self.socket = self.context.socket(zmq.DEALER)
-        self.socket.connect(self.QWeatherStationIP)
+        self.socket.connect(self.QWeatherStationIP + ':' + self.QWeatherStationSocket)
+        self.subsocket = self.context.socket(zmq.SUB)
+        self.subsocket.connect(self.QWeatherStationIP + ':' + str(int(self.QWeatherStationSocket) + SUBSOCKET))
+
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
+        self.poller.register(self.subsocket,zmq.POLLIN)
+
+    def subscribe(self,servername):
+        self.subsocket.setsockopt(zmq.SUBSCRIBE,servername.encode())
+
+    def unsubscribe(self,servername):
+        self.subsocket.setsockopt(zmq.UNSUBSCRIBE,servername.encode())
         
     
     async def get_server_info(self):
@@ -170,8 +187,9 @@ class QWeatherClient:
         self.running = True
         while True:
             try:
-                items = await self.poller.poll(1000)
-                if items:
+                socks = await self.poller.poll(1000)
+                socks = dict(socks)
+                if self.socket in socks:
                     msg = await self.socket.recv_multipart()
                     empty = msg.pop(0)
                     assert empty == b''
@@ -192,6 +210,10 @@ class QWeatherClient:
                         if self.debug:
                             print('DEBUG(',self.name.decode(),': Recieved Ping from QWeatherStation','\n\n')
                         self.send_message([b'',b'b'])
+
+                elif self.subsocket in socks:
+                    msg = await self.subsocket.recv_multipart()
+                    print(msg)
 
 
 
