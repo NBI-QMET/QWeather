@@ -12,7 +12,7 @@ CSUCCESS = '11'.encode()
 
 CPING = '99'.encode()
 
-CTIMEOUT = 2 # timeout for client requests, in seconds
+CTIMEOUT = 200 # timeout for client requests, in seconds
 
 IPREPATTERN = ('(.*[0-9*t]):(.*[0-9])')
 

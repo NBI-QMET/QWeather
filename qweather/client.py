@@ -130,7 +130,7 @@ class QWeatherClient:
         
         self.send_message([b'',b'P'])
         try:
-            if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the server
+            if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the broker
                 raise Exception('QWeatherStation not found')
             else:
                 msg =  self.loop.run_until_complete(self.socket.recv_multipart())

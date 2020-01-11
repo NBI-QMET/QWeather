@@ -1,6 +1,8 @@
 from .constants import *
 import zmq
 from zmq.devices import ThreadProxy
+from zmq.asyncio import Context,Poller
+import asyncio
 import pickle
 import time
 import re
@@ -31,6 +33,7 @@ class QWeatherStation:
         self.clients = {}
         self.pinged = []
         self.requestlist = {}
+        from zmq.asyncio import Context,Poller
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.socket.bind(self.StationIP + ':' + self.StationSocket)
@@ -101,6 +104,8 @@ class QWeatherStation:
 
             self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
 
+
+
         elif SenderType ==b'b': #Pong
             print('got a pong')
             if self.debug:
@@ -111,6 +116,21 @@ class QWeatherStation:
                 self.pinged.remove(sender)
                 print('after',self.pinged)
 
+        elif SenderType == b'#': # execute broker functions
+            command = msg.pop(0)
+            if command == b'P': #request broker to ping all connections and remove old ones
+                if self.debug:
+                    print('DEBUG(QWeatherStation): Ping of all connections requested')
+                self.loop.create_task(self.ping_connections())
+            elif command == b'R': #requests the broker to "restart" by removing all connections
+                print('THis command is not implemented yet')
+                pass #implement this in the future
+
+            if self.debug:
+                if sender in self.clients.keys():
+                    print('DEBUG(QWeatherStation): Recieved Ping from ',self.clients[sender],'\n\n')
+                else:
+                    print('DEBUG(QWeatherStation): Recieved Ping from ',sender,'\n\n')
         else:
             if self.verbose:
                 print('Invalid message')
@@ -179,8 +199,12 @@ class QWeatherStation:
                 pass
 
 
+    async def ping_connections(self):
+        self.__ping()
+        await asyncio.sleep(10)
+        self.__check_ping()
 
-    def ping(self):
+    def __ping(self):
         self.pinged = []
         for aserver in self.servers.values():
             addresse = aserver[0]
@@ -191,7 +215,7 @@ class QWeatherStation:
             self.socket.send_multipart([aclient,b'',CPING,b'P'])
             self.pinged.append(aclient)
 
-    def check_ping(self):
+    def __check_ping(self):
         for aping in self.pinged:
             if aping in self.clients.keys():
                 del self.clients[aping]

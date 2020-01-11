@@ -7,12 +7,12 @@ import asyncio
 
 class Server(QWeatherServer):
 
-    def __init__(self):
+    def __init__(self,verbose,debug):
         super().__init__()
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = 'TestServer'
-        self.verbose = False
-        self.debug = False
+        self.verbose = verbose
+        self.debug = debug
         self.initialize_sockets()
 
     @QMethod
@@ -36,14 +36,30 @@ class Server(QWeatherServer):
         self.ping_broker()
 
     @QMethod
-    def do_something_scheduled(self):
+    def do_something_scheduled(self,sleeptime=None):
         for i in range(10):
             num = np.random.rand(5)
             print('broadcasting ',num)
             self.broadcast(num)
+            if sleeptime is not None:
+                time.sleep(sleeptime)
+
+    @QMethod
+    def get_alot_of_numbers(self,N,seed):
+        print('Getting {:e} numbers'.format(N))
+        np.random.seed(seed)
+        num = np.random.randn(int(N))
+        return num
 
 
 
 if __name__ == "__main__":
-    server = Server()
+    import argparse
+    my_parser = argparse.ArgumentParser()
+    my_parser.add_argument('--verbose', action='store_true')
+    my_parser.add_argument('--debug', action='store_true')
+
+    args = vars(my_parser.parse_args())
+    server = Server(verbose=args['verbose'],debug = args['debug'])
+    
     server.run()

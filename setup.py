@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='QWeather',
-    version='1.0.4',
+    version='2.0.0',
     packages=['qweather',],
     author='A. Arvad Joergensen',
     author_email='Asbjorn.Arvad@nbi.ku.dk',
@@ -11,7 +11,8 @@ setup(
     description='A zeromq based distributed messaging platform',
     long_description=open('README.rst').read(),
     install_requires=[
-        "pyzmq >= 17.0.0.b3"
+        "pyzmq >= 17.0.0.b3",
+        "pyqt5 >= 5.13.1"
     ],
     rpython_requires='~=3.5'
 )
