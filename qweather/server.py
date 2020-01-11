@@ -3,6 +3,7 @@ import zmq
 import pickle
 import time
 import re
+import logging
 
 
 def QMethod(func):
@@ -13,13 +14,16 @@ def QMethod(func):
 
 class QWeatherServer:
 
-    def __init__(self):
+    def __init__(self,verbose=False,debug=False):
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+        if verbose:
+            logging.basicConfig(level=logging.INFO)
         pass
 
     def initialize_sockets(self):
-        if self.verbose:
-            print('#########')
-            print('Connecting "',self.servername,'" to QWeatherStation on IP "',self.QWeatherStationIP,'"\n')
+        
+        logging.info('#########\n Connecting {:} to QWeatherStation on IP: {:}'.format(self.servername,self.QWeatherStationIP))
         self.servername = self.servername.encode()
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.DEALER)
@@ -37,16 +41,14 @@ class QWeatherServer:
         self.poller = zmq.Poller()
         self.poller.register(self.socket,zmq.POLLIN)
         self.ping_broker()
-        if self.verbose:
-            print('Connection established\n')
+        logging.info('Connection established')
 
 
         self.methoddict = {func:getattr(self,func) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)}
         self.register_at_station()
 
     def ping_broker(self):
-        if self.debug:
-            print('DEBUG(',self.servername.decode(),'): Sending ping:\n',[b'P'],'\n\n')
+        logging.debug('({:}): Sending ping'.format(self.servername.decode()))
         self.send_message([b'',b'P'])
         try:
             if len(self.poller.poll(timeout=5000)) == 0: #wait 2 seconds for a ping from the server
@@ -55,8 +57,7 @@ class QWeatherServer:
                 msg = self.socket.recv_multipart()
                 empty = msg.pop(0)
                 pong = msg.pop(0)
-                if self.debug:
-                    print('DEBUG(',self.servername.decode(),'): Recieved Pong: ',pong,'\n\n')
+                logging.debug('({:}): Recieved Pong'.format(self.servername.decode()))
                 if pong != b'b':
                     raise Exception('QWeatherStation sent wrong Pong')              
 
@@ -68,8 +69,7 @@ class QWeatherServer:
     def register_at_station(self):
         self.methodlist = [(func,getattr(self,func).__doc__) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)]
         msg = [b'',b'S',CREADY,PSERVER,self.servername,pickle.dumps(self.methodlist)]
-        if self.debug:
-            print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n',msg,'\n\n')
+        logging.debug('({:}): TO QWeatherStation:\n{:}'.format(self.servername.decode(),msg))
         self.send_message(msg)
 
 
@@ -89,8 +89,7 @@ class QWeatherServer:
         self.socket.close()
 
     def handle_messages(self,msg):
-        if self.debug:
-            print('DEBUG(',self.servername.decode(),'): From QWeatherStation:\n',msg,'\n\n')
+        logging.debug('({:}): From QWeatherStation:\n{:}'.format(self.servername.decode(),msg))
         empty = msg.pop(0)
         assert empty == b''
         command = msg.pop(0)
@@ -100,21 +99,18 @@ class QWeatherServer:
             client = msg.pop(0)
             fnc = msg.pop(0).decode()
             args,kwargs = pickle.loads(msg.pop(0))
-            if self.debug:
-                print('DEBUG(',self.servername.decode(),'): Calling function:\n',fnc,' with arguments:\n',args,kwargs,'\n\n')
+            logging.debug('({:}): Calling Function {:} with arguments {:},{:}'.format(self.servername.decode(),fnc,args,kwargs))
             try:
                 answ = self.methoddict[fnc](*args,**kwargs)
             except Exception as e:
                 answ = Exception('Server crashed')
                 
             answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
-            if self.debug:
-                print('DEBUG(',self.servername.decode(),'): To QWeatherStation:\n', answ,'\n\n')
+            logging.debug('({:}): To QWeatherStation:\n{:}'.format(self.servername.decode(),answ))
             self.send_message(answ)        
 
         elif command == CREADY+CSUCCESS:
-            if self.verbose:
-                print('\nMethods registered at QWeatherStation. (',[i[0] for i in self.methodlist],')')
+             logging.info('Methods registered at QWeatherStation. ({:})'.format([i[0] for i in self.methodlist]))
 
         elif command == CREADY+CFAIL:
             raise Exception(msg.pop(0).decode())
@@ -123,8 +119,7 @@ class QWeatherServer:
             ping = msg.pop(0)
             if ping != b'P':
                 raise Exception('QWeatherStation sent wrong ping')
-            if self.debug:
-                print('DEBUG(',self.servername.decode(),': Recieved Ping from QWeatherStation','\n\n')
+            logging.debug('({:}): Recieved Ping from QWeatherStation'.format(self.servername.decode()))
             self.send_message([b'',b'b'])
 
     def send_message(self,msg):

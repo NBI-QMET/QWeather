@@ -5,6 +5,7 @@ from zmq.asyncio import Context, Poller
 import re
 import asyncio
 import time
+import logging
 from PyQt5.QtCore import pyqtSignal
 class QWeatherClient:
 
@@ -58,8 +59,10 @@ class QWeatherClient:
         if name is None:
             import socket
             name = socket.gethostname()
-        self.debug = debug
-        self.verbose = verbose
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+        if verbose:
+            logging.basicConfig(level=logging.INFO)
         self.name = name.encode()
         self.reconnect()
         self.ping_broker()
@@ -136,8 +139,8 @@ class QWeatherClient:
                 msg =  self.loop.run_until_complete(self.socket.recv_multipart())
                 empty = msg.pop(0)
                 pong = msg.pop(0)
-                if self.debug:
-                    print('DEBUG(',self.name.decode(),'): Recieved Pong: ',pong,'\n\n')
+
+                logging.debug('({:}): Recieved Pong: {:}'.format(self.name.decode(),pong))
                 if pong != b'b':
                     raise Exception('QWeatherStation sent wrong Pong')              
 
@@ -211,8 +214,7 @@ class QWeatherClient:
                         ping = msg.pop(0)
                         if ping != b'P':
                             raise Exception('QWeatherStation sent wrong ping')
-                        if self.debug:
-                            print('DEBUG(',self.name.decode(),': Recieved Ping from QWeatherStation','\n\n')
+                        logging.debug('({:}): Recieved Ping from QWeatherStation'.format(self.name.decode()))
                         self.send_message([b'',b'b'])
 
                 elif self.subsocket in socks:
