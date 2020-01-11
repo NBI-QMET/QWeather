@@ -27,11 +27,11 @@ class QWeatherStation:
         self.StationSocket = IpAndPort.group(2)
         assert self.StationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://*:XXXX)'
         assert len(self.StationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://*:XXXX)'
-
+        formatting = '{:}: %(levelname)s: %(message)s'.format('QWeatherStation')
         if debug:
-            logging.basicConfig(level=logging.DEBUG)
+            logging.basicConfig(format=formatting,level=logging.DEBUG)
         if verbose:
-            logging.basicConfig(level=logging.INFO)
+            logging.basicConfig(format=formatting,level=logging.INFO)
         self.servers = {}
         self.clients = {}
         self.pinged = []
@@ -46,8 +46,23 @@ class QWeatherStation:
         self.proxy.start()
         self.poller = Poller()
         self.poller.register(self.socket,zmq.POLLIN)
-        logging.info('QWeatherStation ready to run on IP: {:}'.format(self.StationIP))
 
+
+        logging.info('Ready to run on IP: {:}'.format(self.get_own_ip()))
+
+
+    def get_own_ip(self):
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # doesn't even have to be reachable
+            s.connect(('10.255.255.255', 1))
+            IP = s.getsockname()[0]
+        except:
+            IP = '127.0.0.1'
+        finally:
+            s.close()
+        return IP
     async def async_run(self):
         while True:
             try:
@@ -83,9 +98,9 @@ class QWeatherStation:
     def handle_message(self,msg):
         sender = msg.pop(0)
         if sender in self.clients.keys():
-            logging.debug('(QWeatherStation): Recieved message from {:}:\n{:}'.format(self.clients[sender],msg,'\n\n'))    
+            logging.debug('Recieved message from {:}:\n{:}'.format(self.clients[sender],msg,'\n\n'))    
         else:
-            logging.debug('(QWeatherStation): Recieved message from {:}:\n{:}'.format(sender,msg,'\n\n'))
+            logging.debug('Recieved message from {:}:\n{:}'.format(sender,msg,'\n\n'))
         empty = msg.pop(0)
         assert empty == b''
         SenderType = msg.pop(0)
@@ -98,9 +113,9 @@ class QWeatherStation:
 
         elif SenderType == b'P': #Ping
             if sender in self.clients.keys():
-                logging.debug('(QWeatherStation): Recieved Ping from {:}:\n{:}'.format(self.clients[sender]))
+                logging.debug('Recieved Ping from {:}:\n{:}'.format(self.clients[sender]))
             else:
-                logging.debug('(QWeatherStation): Recieved Ping from {:}'.format(sender))
+                logging.debug('Recieved Ping from {:}'.format(sender))
 
             self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
 
@@ -108,7 +123,7 @@ class QWeatherStation:
 
         elif SenderType ==b'b': #Pong
             print('got a pong')
-            logging.debug('(QWeatherStation): Recieved Pong from {:}'.format(sender))
+            logging.debug('Recieved Pong from {:}'.format(sender))
             print(sender,self.pinged,sender in self.pinged)
             if sender in self.pinged:
                 print('before',self.pinged)
@@ -118,16 +133,16 @@ class QWeatherStation:
         elif SenderType == b'#': # execute broker functions
             command = msg.pop(0)
             if command == b'P': #request broker to ping all connections and remove old ones
-                logging.debug('(QWeatherStation): Ping of all connections requested')
+                logging.debug('Ping of all connections requested')
                 self.loop.create_task(self.ping_connections())
             elif command == b'R': #requests the broker to "restart" by removing all connections
                 print('THis command is not implemented yet')
                 pass #implement this in the future
 
             if sender in self.clients.keys():
-                logging.debug('(QWeatherStation): Recieved Ping from {:}'.format(self.clients[sender]))
+                logging.debug('Recieved Ping from {:}'.format(self.clients[sender]))
             else:
-                logging.debug('(QWeatherStation): Recieved Ping from {:}'.format(sender))
+                logging.debug('Recieved Ping from {:}'.format(sender))
         else:
             logging.info('Invalid message')
 
@@ -153,7 +168,7 @@ class QWeatherStation:
             msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
             if len(self.servers[server][2]) ==  0:
                 self.socket.send_multipart(msg)
-                logging.debug('(QWeatherStation): Client request at {:}:\n{:}'.format(self.clients[sender],msg))
+                logging.debug('Client request at {:}:\n{:}'.format(self.clients[sender],msg))
             else:
                 self.servers[server][2].append(msg)
 
@@ -182,10 +197,10 @@ class QWeatherStation:
                 timeouttask = self.requestlist.pop(messageid+client)
                 timeouttask.cancel()
                 self.socket.send_multipart(msg)
-                logging.debug('(QWeatherStation): To {:}:\n{:}'.format(client,msg))
+                logging.debug('To {:}:\n{:}'.format(client,msg))
                 if len(self.servers[server][2]) > 0:
                     self.socket.send_multipart(self.servers[server][2].pop(0))
-                    logging.debug('(QWeatherStation): Server answer to {:}:\n{:}'.format(self.clients[sender],msg))
+                    logging.debug('Server answer to {:}:\n{:}'.format(self.clients[sender],msg))
             except KeyError:
                 pass
 

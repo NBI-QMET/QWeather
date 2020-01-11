@@ -8,7 +8,7 @@ pr = cProfile.Profile()
 def print_message(msg):
 	print('msg>',msg)
 
-with subprocess.Popen(['python', 'TestBroker.py','--verbose','--debug']) as procBroker:
+with subprocess.Popen(['python', 'TestBroker.py','--verbose','--debug'],creationflags=subprocess.CREATE_NEW_CONSOLE) as procBroker:
 	time.sleep(1)
 	with subprocess.Popen(['python', 'TestServer.py','--verbose','--debug'],creationflags=subprocess.CREATE_NEW_CONSOLE) as procServer1:
 		time.sleep(1)

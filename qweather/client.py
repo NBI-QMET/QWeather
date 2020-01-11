@@ -59,10 +59,12 @@ class QWeatherClient:
         if name is None:
             import socket
             name = socket.gethostname()
+
+        formatting = '{:}: %(levelname)s: %(message)s'.format(name)
         if debug:
-            logging.basicConfig(level=logging.DEBUG)
+            logging.basicConfig(format=formatting,level=logging.DEBUG)
         if verbose:
-            logging.basicConfig(level=logging.INFO)
+            logging.basicConfig(format=formatting,level=logging.INFO)
         self.name = name.encode()
         self.reconnect()
         self.ping_broker()
@@ -140,7 +142,7 @@ class QWeatherClient:
                 empty = msg.pop(0)
                 pong = msg.pop(0)
 
-                logging.debug('({:}): Recieved Pong: {:}'.format(self.name.decode(),pong))
+                logging.debug('Recieved Pong: {:}'.format(pong))
                 if pong != b'b':
                     raise Exception('QWeatherStation sent wrong Pong')              
 
@@ -214,7 +216,7 @@ class QWeatherClient:
                         ping = msg.pop(0)
                         if ping != b'P':
                             raise Exception('QWeatherStation sent wrong ping')
-                        logging.debug('({:}): Recieved Ping from QWeatherStation'.format(self.name.decode()))
+                        logging.debug('Recieved Ping from QWeatherStation')
                         self.send_message([b'',b'b'])
 
                 elif self.subsocket in socks:
