@@ -5,6 +5,7 @@ import time
 import re
 import logging
 import traceback
+import atexit
 
 def QMethod(func):
     '''Decorator for exposing methods that can be called by clients'''
@@ -47,6 +48,7 @@ class QWeatherServer:
 
         self.methoddict = {func:getattr(self,func) for func in dir(self) if getattr(getattr(self,func),'is_client_accessible',False)}
         self.register_at_station()
+        atexit.register(self.close)
 
     def ping_broker(self):
         logging.debug('Sending ping')
@@ -86,6 +88,7 @@ class QWeatherServer:
                 break
 
     def close(self):
+        self.send_message([b'',b'S',SDISCONNECT] + [self.servername])
         self.poller.unregister(self.socket)
         self.socket.close()
 
@@ -107,7 +110,7 @@ class QWeatherServer:
                 traceback.print_exc()
                 answ = Exception('Call failed on server')
                 
-            answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
+            answ = [empty,b'S',CREPLY] + [messageid,client,pickle.dumps(answ)]
             logging.debug('To QWeatherStation:\n{:}'.format(answ))
             self.send_message(answ)        
 

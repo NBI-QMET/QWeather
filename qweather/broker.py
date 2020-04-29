@@ -34,8 +34,10 @@ class QWeatherStation:
             logging.basicConfig(format=formatting,level=logging.INFO)
         self.servers = {}
         self.clients = {}
+        self.servermethods = {}
+        self.serverjobs = {}
         self.pinged = []
-        self.requestlist = {}
+        self.requesttimeoutdict = {}
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.socket.bind(self.StationIP + ':' + self.StationSocket)
@@ -141,7 +143,7 @@ class QWeatherStation:
             if not version == PCLIENT:
                 newmsg = [sender,b'',CREADY + CFAIL,'Mismatch in protocol between client and broker'.encode()]
             else:
-                newmsg = [sender,b'',CREADY + CSUCCESS] + [pickle.dumps(self.servers)]
+                newmsg = [sender,b'',CREADY + CSUCCESS] + [pickle.dumps(self.servers)] + [pickle.dumps(self.servermethods)]
 
                 name = msg.pop(0).decode()
                 if name not in self.clients.keys():
@@ -151,16 +153,22 @@ class QWeatherStation:
 
         elif command == CREQUEST:
             messageid = msg.pop(0)
-            server = msg.pop(0).decode()
-            serveraddr = self.servers[server][0]
-            self.requestlist[messageid+sender] = self.loop.call_later(B_SERVERRESPONSE_TIMEOUT, self.socket.send_multipart,[sender,b'',CREQUEST + CFAIL,messageid,server.encode(),pickle.dumps((Exception('Timeout error')))])
-            msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
-            if len(self.servers[server][2]) ==  0:
-                self.socket.send_multipart(msg)
-                logging.debug('Client request at {:}:\n{:}'.format(self.clients[sender],msg))
-            else:
-                self.servers[server][2].append(msg)
+            servername = msg.pop(0).decode()
+            try:
+                serveraddr = next(key for key, value in self.servers.items() if value == servername)
+                self.requesttimeoutdict[messageid+sender] = self.loop.call_later(B_SERVERRESPONSE_TIMEOUT, self.socket.send_multipart,[sender,b'',CREQUEST + CFAIL,messageid,servername.encode(),pickle.dumps((Exception('Timeout error')))])
+                msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
+                if len(self.serverjobs[serveraddr]) ==  0:
+                    self.socket.send_multipart(msg)
+                    logging.debug('Client request at {:}:\n{:}'.format(self.clients[sender],msg))
+                else:
+                    self.serverjobs[serveraddr].append(msg)
+            except StopIteration as e:
+                logging.debug('Trying to contact a server that does not exist')
 
+        elif command == CDISCONNECT:
+            logging.debug('Client with ID {:} disconnecting',self.clients[sender])
+            self.clients.pop(sender)
 
 
     def process_server(self,sender,command,msg):
@@ -171,27 +179,35 @@ class QWeatherStation:
             else:
                 servername = msg.pop(0).decode()
                 servermethods = pickle.loads(msg.pop(0))
-                self.servers[servername] = (sender,servermethods,[])
+                self.servers[sender] = servername
+                self.servermethods[sender] = servermethods
+                self.serverjobs[sender] = []
                 newmsg = [sender,b'',CREADY + CSUCCESS]
                 logging.info('Server {:} ready at: {:}'.format(servername,int.from_bytes(sender,byteorder='big')))
             self.socket.send_multipart(newmsg)
 
         elif command == CREPLY:
             messageid = msg.pop(0)
-            server = msg.pop(0).decode()
+            servername = self.servers[sender]
             client = msg.pop(0)
             answ = msg.pop(0)
-            msg = [client,b'',CREQUEST + CSUCCESS,messageid,server.encode(),answ]
+            msg = [client,b'',CREQUEST + CSUCCESS,messageid,servername.encode(),answ]
             try:
-                timeouttask = self.requestlist.pop(messageid+client)
+                timeouttask = self.requesttimeoutdict.pop(messageid+client)
                 timeouttask.cancel()
                 self.socket.send_multipart(msg)
-                logging.debug('To {:}:\n{:}'.format(client,msg))
-                if len(self.servers[server][2]) > 0:
-                    self.socket.send_multipart(self.servers[server][2].pop(0))
-                    logging.debug('Server answer to ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big'),msg))
+                logging.debug('Server answer to ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big'),msg))
+                if len(self.serverjobs[sender]) > 0:
+                    self.socket.send_multipart(self.serverjobs[sender].pop(0))
             except KeyError:
-                pass
+                Print("Trying to send answer to client that does not exist")
+
+        elif command == SDISCONNECT:
+            server = msg.pop(0).decode()
+            logging.debug('Server with ID {:} disconnecting',self.servers[sender])
+            self.servers.pop(sender)
+            self.serverjobs.pop(sender)
+            self.servermethods.pop(sender)
 
 
     async def ping_connections(self):
@@ -201,8 +217,7 @@ class QWeatherStation:
 
     def __ping(self):
         self.pinged = []
-        for aserver in self.servers.values():
-            addresse = aserver[0]
+        for addresse in self.servers.keys():
             self.socket.send_multipart([addresse,b'',CPING,b'P'])
             self.pinged.append(addresse)
 
@@ -221,3 +236,9 @@ class QWeatherStation:
         print('servers:',self.servers)
 #        print(self.pinged)
         self.pinged = []
+
+    def get_servers(self):
+        return self.servers
+
+    def get_clients(self):
+        return self.clients

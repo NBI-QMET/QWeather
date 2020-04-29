@@ -7,6 +7,8 @@ CREQUEST = '2'.encode()
 CREPLY = '3'.encode()
 CDISCONNECT = '4'.encode()
 
+SDISCONNECT = '5'.encode()
+
 CFAIL = '00'.encode()
 CSUCCESS = '11'.encode()
 

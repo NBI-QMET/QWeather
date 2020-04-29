@@ -7,6 +7,7 @@ import asyncio
 import time
 import logging
 from PyQt5.QtCore import pyqtSignal
+import atexit
 class QWeatherClient:
 
     class serverclass:
@@ -72,6 +73,7 @@ class QWeatherClient:
         self.loop.run_until_complete(self.get_server_info())
         self.running = False
         self.messageid = 0
+        atexit.register(self.close)
 
 
 
@@ -116,13 +118,15 @@ class QWeatherClient:
         if command == CREADY + CFAIL:
             raise Exception(msg.pop(0).decode())
         else:
-            for name,items in pickle.loads(msg.pop(0)).items():
-                addr = items[0]
-                methods = items[1]
+            serverdict = pickle.loads(msg.pop(0))
+            servermethoddict = pickle.loads(msg.pop(0))
+            for addr,name in serverdict.items():
+                methods = servermethoddict[addr]
                 server = self.serverclass(name,addr,methods,self)
                 server.is_remote_server = True
                 setattr(self,name,server)
                 self.serverlist.append(server)
+
         return None
 
     def send_request(self,body,timeout):
@@ -228,8 +232,10 @@ class QWeatherClient:
             except KeyboardInterrupt:
                 self.close()
                 break
-    
+
+
     def close(self):
+        self.send_message([b'',b'C',CDISCONNECT])
         self.poller.unregister(self.socket)
         self.socket.close()
 
