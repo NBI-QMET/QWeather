@@ -20,9 +20,11 @@ class QWeatherClient:
 
         def bindingfunc(self,methodname,methoddoc):
             def func(*args,**kwargs):
-                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])])
+                timeout = kwargs.pop('timeout',CSYNCTIMEOUT) # This pops the value for timeout if it exists in kwargs, or returns the default timeout value. So this saves a line of code on logic check
+                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],timeout=timeout)
             func.__name__ = methodname
             func.__doc__ = methoddoc
+            func.__repr__ = lambda: methoddoc
             func.is_remote_server_method = True
             return func
 
@@ -50,7 +52,6 @@ class QWeatherClient:
         self.QWeatherStationSocket = IpAndPort.group(2)
         assert self.QWeatherStationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
         assert len(self.QWeatherStationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
-
         if loop is None:
             self.loop = asyncio.get_event_loop()
         else:
@@ -67,10 +68,13 @@ class QWeatherClient:
             logging.basicConfig(format=formatting,level=logging.INFO)
         self.name = name.encode()
         self.reconnect()
-        self.ping_broker()
+#        self.ping_broker()
         self.loop.run_until_complete(self.get_server_info())
         self.running = False
         self.messageid = 0
+
+
+
 
 
 
@@ -121,18 +125,17 @@ class QWeatherClient:
                 self.serverlist.append(server)
         return None
 
-    def send_request(self,body):
+    def send_request(self,body,timeout):
         self.messageid+=1
         if self.messageid > 255:
             self.messageid = 0
         if self.running:
             result =  asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
         else:
-            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'))
+            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'),timeout)
         return result
 
     def ping_broker(self):
-        
         self.send_message([b'',b'P'])
         try:
             if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the broker
@@ -152,19 +155,22 @@ class QWeatherClient:
             raise e
         
 
-    def sync_send_request(self,body,ident):
+    def sync_send_request(self,body,ident,timeout):
         msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)
-        msg = self.loop.run_until_complete(self.socket.recv_multipart())
-        empty = msg.pop(0)
-        assert empty == b''
-        command = msg.pop(0)
-        ident = msg.pop(0)
-        server = msg.pop(0)
-        answ = pickle.loads(msg[0])
-        return answ
-    
+        if len(self.loop.run_until_complete(self.poller.poll(timeout=timeout))) == 0:
+            return Exception('Synchronous request timed out. Try adding following keyword to function call: "timeout=XX" in ms')
+        else:
+            msg = self.loop.run_until_complete(self.socket.recv_multipart())
+            empty = msg.pop(0)
+            assert empty == b''
+            command = msg.pop(0)
+            ident = msg.pop(0)
+            server = msg.pop(0)
+            answ = pickle.loads(msg[0])
+            return answ
+   
     async def async_send_request(self,body,ident):
         server = body[0]
         msg = [b'',b'C',CREQUEST,ident]  + body
@@ -174,23 +180,15 @@ class QWeatherClient:
         answ = await self.recieve_message(ident+server)
         self.futureobjectdict.pop(ident+server)
         return answ
-       # return msg
 
     def send_message(self,msg):
-        #self.loop.create_task(self.socket.send_multipart(msg))
         self.socket.send_multipart(msg)
 
 
     def recieve_message(self,ident):
         tmp = self.loop.create_future()
         self.futureobjectdict[ident] = tmp
-        #print('went here')
         return tmp
-
-        #ans =self.loop.create_task(self.socket.recv_multipart())
-
-#        ans = await self.socket.recv_multipart()
-  #      return ans
 
     async def run(self):
         self.running = True

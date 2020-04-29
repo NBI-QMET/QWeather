@@ -4,7 +4,7 @@ import pickle
 import time
 import re
 import logging
-
+import traceback
 
 def QMethod(func):
     '''Decorator for exposing methods that can be called by clients'''
@@ -41,7 +41,7 @@ class QWeatherServer:
         self.pubsocket.connect(self.QWeatherStationIP + ':' + str(int(self.QWeatherStationSocket) + PUBLISHSOCKET))
         self.poller = zmq.Poller()
         self.poller.register(self.socket,zmq.POLLIN)
-        self.ping_broker()
+        #self.ping_broker()
         logging.info('Connection established')
 
 
@@ -104,7 +104,8 @@ class QWeatherServer:
             try:
                 answ = self.methoddict[fnc](*args,**kwargs)
             except Exception as e:
-                answ = Exception('Server crashed')
+                traceback.print_exc()
+                answ = Exception('Call failed on server')
                 
             answ = [empty,b'S',CREPLY] + [messageid,self.servername,client,pickle.dumps(answ)]
             logging.debug('To QWeatherStation:\n{:}'.format(answ))

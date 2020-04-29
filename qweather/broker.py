@@ -36,7 +36,6 @@ class QWeatherStation:
         self.clients = {}
         self.pinged = []
         self.requestlist = {}
-        from zmq.asyncio import Context,Poller
         self.cnx = Context()
         self.socket = self.cnx.socket(zmq.ROUTER)
         self.socket.bind(self.StationIP + ':' + self.StationSocket)
@@ -63,6 +62,7 @@ class QWeatherStation:
         finally:
             s.close()
         return IP
+
     async def async_run(self):
         while True:
             try:
@@ -79,17 +79,6 @@ class QWeatherStation:
 
     def run(self):
         self.loop.run_until_complete(self.async_run())
-        '''
-        while True:
-            try:
-                items = self.poller.poll(1000)
-            except KeyboardInterrupt:
-                self.close()
-                break
-            if items:
-                msg = self.socket.recv_multipart()
-                self.handle_message(msg)
-        '''
 
     def close(self):
         self.poller.unregister(self.socket)
@@ -98,9 +87,9 @@ class QWeatherStation:
     def handle_message(self,msg):
         sender = msg.pop(0)
         if sender in self.clients.keys():
-            logging.debug('Recieved message from {:}:\n{:}'.format(self.clients[sender],msg,'\n\n'))    
+            logging.debug('Recieved message from ID:{:}:\n{:}'.format(int.from_bytes(sender,byteorder='big'),msg,'\n\n'))    
         else:
-            logging.debug('Recieved message from {:}:\n{:}'.format(sender,msg,'\n\n'))
+            logging.debug('Recieved message from ID:{:}:\n{:}'.format(int.from_bytes(sender,byteorder='big'),msg,'\n\n'))
         empty = msg.pop(0)
         assert empty == b''
         SenderType = msg.pop(0)
@@ -113,9 +102,9 @@ class QWeatherStation:
 
         elif SenderType == b'P': #Ping
             if sender in self.clients.keys():
-                logging.debug('Recieved Ping from {:}:\n{:}'.format(self.clients[sender]))
+                logging.debug('Recieved Ping from ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big')))
             else:
-                logging.debug('Recieved Ping from {:}'.format(sender))
+                logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
 
             self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
 
@@ -123,7 +112,7 @@ class QWeatherStation:
 
         elif SenderType ==b'b': #Pong
             print('got a pong')
-            logging.debug('Recieved Pong from {:}'.format(sender))
+            logging.debug('Recieved Pong from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
             print(sender,self.pinged,sender in self.pinged)
             if sender in self.pinged:
                 print('before',self.pinged)
@@ -140,9 +129,9 @@ class QWeatherStation:
                 pass #implement this in the future
 
             if sender in self.clients.keys():
-                logging.debug('Recieved Ping from {:}'.format(self.clients[sender]))
+                logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(self.clients[sender],byteorder='big')))
             else:
-                logging.debug('Recieved Ping from {:}'.format(sender))
+                logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
         else:
             logging.info('Invalid message')
 
@@ -157,14 +146,14 @@ class QWeatherStation:
                 name = msg.pop(0).decode()
                 if name not in self.clients.keys():
                     self.clients[sender] = name
-                logging.info('Client ready at {:}{:}'.format(int.from_bytes(sender,byteorder='big'),self.clients[sender]))
+                logging.info('Client ready at ID:{:} name:{:}'.format(int.from_bytes(sender,byteorder='big'),self.clients[sender]))
             self.socket.send_multipart(newmsg)
 
         elif command == CREQUEST:
             messageid = msg.pop(0)
             server = msg.pop(0).decode()
             serveraddr = self.servers[server][0]
-            self.requestlist[messageid+sender] = self.loop.call_later(CTIMEOUT, self.socket.send_multipart,[sender,b'',CREQUEST + CFAIL,messageid,server.encode(),pickle.dumps((Exception('Timeout error')))])
+            self.requestlist[messageid+sender] = self.loop.call_later(B_SERVERRESPONSE_TIMEOUT, self.socket.send_multipart,[sender,b'',CREQUEST + CFAIL,messageid,server.encode(),pickle.dumps((Exception('Timeout error')))])
             msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
             if len(self.servers[server][2]) ==  0:
                 self.socket.send_multipart(msg)
@@ -200,7 +189,7 @@ class QWeatherStation:
                 logging.debug('To {:}:\n{:}'.format(client,msg))
                 if len(self.servers[server][2]) > 0:
                     self.socket.send_multipart(self.servers[server][2].pop(0))
-                    logging.debug('Server answer to {:}:\n{:}'.format(self.clients[sender],msg))
+                    logging.debug('Server answer to ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big'),msg))
             except KeyError:
                 pass
 

@@ -12,10 +12,14 @@ CSUCCESS = '11'.encode()
 
 CPING = '99'.encode()
 
-CTIMEOUT = 200 # timeout for client requests, in seconds
+B_SERVERRESPONSE_TIMEOUT = 10 #timeout for the broker to recieve a reply to a request
+CSYNCTIMEOUT = 5000 # timeout for synchronous client requests, in milliseconds
 
 IPREPATTERN = ('(.*[0-9*t]):(.*[0-9])')
 
 PUBLISHSOCKET = 2
 SUBSOCKET = 1
+
+
+
 

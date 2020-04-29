@@ -7,29 +7,31 @@ import asyncio
 
 class Server(QWeatherServer):
 
-    def __init__(self,verbose,debug):
+    def __init__(self,name,verbose,debug):
         super().__init__()
         self.QWeatherStationIP = "tcp://localhost:5559"
-        self.servername = 'TestServer'
+        self.servername = name
         self.verbose = verbose
         self.debug = debug
         self.initialize_sockets()
 
     @QMethod
-    def get_number(self,offset = 0):
-        """Return a numper upon request"""
-#        socket.send(b"%f" % np.random.rand())
-        time.sleep(1)
-        num = (np.random.rand()+offset)
-        return num
+    def get_number(self):
+        """Returns the number 2"""
+        return 2
 
     @QMethod
-    def multiply_stuff(self,a,b = None):
-        """Return the multipla of a and b"""
-        if b is None:
-            return a*a
-        else:
-            return a*b
+    def crashing_function(self):
+        """Does an illegal division by zero and crashes the server"""
+        1/0
+        return
+
+    @QMethod
+    def very_long_function(self):
+        """Waits for 6 seconds before returning"""
+        time.sleep(6)
+        return 2
+
 
     @QMethod
     def ping(self):
@@ -44,13 +46,6 @@ class Server(QWeatherServer):
             if sleeptime is not None:
                 time.sleep(sleeptime)
 
-    @QMethod
-    def get_alot_of_numbers(self,N,seed):
-        print('Getting {:e} numbers'.format(N))
-        np.random.seed(seed)
-        num = np.random.randn(int(N))
-        return num
-
 
 
 if __name__ == "__main__":
@@ -58,8 +53,9 @@ if __name__ == "__main__":
     my_parser = argparse.ArgumentParser()
     my_parser.add_argument('--verbose', action='store_true')
     my_parser.add_argument('--debug', action='store_true')
+    my_parser.add_argument('name', nargs = '?')
 
     args = vars(my_parser.parse_args())
-    server = Server(verbose=args['verbose'],debug = args['debug'])
+    server = Server(name=args['name'],verbose=args['verbose'],debug = args['debug'])
     
     server.run()
