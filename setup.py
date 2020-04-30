@@ -10,6 +10,7 @@ setup(
     url='https://github.com/Arvad/QWeather',
     description='A zeromq based distributed messaging platform',
     long_description=open('README.rst').read(),
+    long_description_content_type="text/markdown",
     install_requires=[
         "pyzmq >= 17.0.0.b3",
     ],
