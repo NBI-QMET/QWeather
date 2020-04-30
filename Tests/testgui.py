@@ -17,7 +17,7 @@ class testgui(QWidget):
         self.initialize()
         brokerconn = "tcp://localhost:5559"
         self.client = QWeatherClient(brokerconn,loop = loop,name='testgui')
-        self.client.subscribe('TestServer',self.print_message)
+        self.client.subscribe('ServerA',self.print_message)
         self.loop = loop
         self.loop.create_task(self.client.run())
 
@@ -32,8 +32,8 @@ class testgui(QWidget):
         layout.addWidget(sendbutton2)
         layout.addWidget(l2)
 
-        sendbutton.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.TestServer.do_something_scheduled())))
-        sendbutton2.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.TestServer2.get_number(),l2)))
+        sendbutton.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.ServerA.do_something_scheduled())))
+        sendbutton2.pressed.connect(lambda : self.loop.create_task(self.send_command(self.client.ServerB.get_number())))
         self.setLayout(layout)
         self.show()
 
@@ -42,6 +42,9 @@ class testgui(QWidget):
 
     async def send_command(self,func):
         a = await func
+        print(a)
+
+
         
     def closeEvent(self,e):
         self.loop.stop()

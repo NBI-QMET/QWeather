@@ -229,9 +229,12 @@ class QWeatherClient:
 
 
 
+
+
             except KeyboardInterrupt:
                 self.close()
                 break
+
 
 
     def close(self):

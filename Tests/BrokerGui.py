@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import *
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtCore
 import asyncio
 import time
 import sys
@@ -13,11 +13,15 @@ class BrokerGui(QWidget):
         super().__init__()
 
         self.brokerconn = "tcp://*:5559"
-        self.broker = QWeatherStation(self.brokerconn,loop,debug=True,verbose=False)
+        self.broker = QWeatherStation(self.brokerconn,loop,debug=False,verbose=False)
         self.setWindowTitle('QWeatherStation')
 
         self.loop = loop
         self.initialize()
+        self.refreshtimer =QtCore.QTimer()
+        self.refreshtimer.timeout.connect(self.populate_serverlist)
+        self.refreshtimer.timeout.connect(self.populate_clientlist)
+        self.refreshtimer.start(1000)
         self.loop.create_task(self.broker.async_run())
 
     def initialize(self):
@@ -50,7 +54,7 @@ class BrokerGui(QWidget):
         self.loop.ensure_future(self.ping_stuff())
 
     async def ping_stuff(self):
-        self.broker.ping()
+        self.broker.__ping()
         await asyncio.sleep(2)
         self.broker.check_ping()
 
@@ -77,7 +81,7 @@ class BrokerGui(QWidget):
 
     def populate_serverlist(self):
         servertext = ''
-        for aserver in self.broker.servers.keys():
+        for aserver in self.broker.get_servers().values():
             servertext += aserver + '\n'
         if len(self.broker.servers) == 0:
             servertext = ' ---- No Servers Connected ----'
@@ -86,7 +90,7 @@ class BrokerGui(QWidget):
 
     def populate_clientlist(self):
         clienttext = ''
-        for aclient in self.broker.clients.values():
+        for aclient in self.broker.get_clients().values():
             clienttext += aclient + '\n'
         if len(self.broker.clients) == 0:
             clienttext = ' ---- No Clients Connected ----'

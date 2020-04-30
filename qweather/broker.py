@@ -15,8 +15,8 @@ class QWeatherStation:
     def __init__(self,IP,loop = None,verbose=False,debug = False):
         if loop is None:
             #from zmq import Context,Poller
-            import asyncio
-            from zmq.asyncio import Context,Poller
+#        import asyncio
+ #       from zmq.asyncio import Context,Poller
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
@@ -32,8 +32,8 @@ class QWeatherStation:
             logging.basicConfig(format=formatting,level=logging.DEBUG)
         if verbose:
             logging.basicConfig(format=formatting,level=logging.INFO)
-        self.servers = {}
-        self.clients = {}
+        self.servers = {} # key:value = clientaddress:value, bytes:string
+        self.clients = {} # key:value = clientaddress:value, bytes:string
         self.servermethods = {}
         self.serverjobs = {}
         self.pinged = []
@@ -89,7 +89,7 @@ class QWeatherStation:
     def handle_message(self,msg):
         sender = msg.pop(0)
         if sender in self.clients.keys():
-            logging.debug('Recieved message from ID:{:}:\n{:}'.format(int.from_bytes(sender,byteorder='big'),msg,'\n\n'))    
+            logging.debug('Recieved message from {:}:\n{:}'.format(self.clients[sender],msg,'\n\n'))    
         else:
             logging.debug('Recieved message from ID:{:}:\n{:}'.format(int.from_bytes(sender,byteorder='big'),msg,'\n\n'))
         empty = msg.pop(0)
@@ -104,7 +104,7 @@ class QWeatherStation:
 
         elif SenderType == b'P': #Ping
             if sender in self.clients.keys():
-                logging.debug('Recieved Ping from ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big')))
+                logging.debug('Recieved Ping from "{:}"'.format(self.clients[sender]))
             else:
                 logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
 
@@ -123,15 +123,18 @@ class QWeatherStation:
 
         elif SenderType == b'#': # execute broker functions
             command = msg.pop(0)
-            if command == b'P': #request broker to ping all connections and remove old ones
-                logging.debug('Ping of all connections requested')
+            if command == b'P': #request broker to ping all servers and remove old ones
+                logging.debug('Ping of all servers requested')
                 self.loop.create_task(self.ping_connections())
             elif command == b'R': #requests the broker to "restart" by removing all connections
-                print('THis command is not implemented yet')
-                pass #implement this in the future
+                for atask in self.requesttimeoutdict.items():
+                    atask.cancel()
+                self.requesttimeoutdict = {}
+                self.servers = {}
+                self.clients = {}
 
             if sender in self.clients.keys():
-                logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(self.clients[sender],byteorder='big')))
+                logging.debug('Recieved Ping from "{:}"'.format(self.clients[sender]))
             else:
                 logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
         else:
@@ -160,14 +163,14 @@ class QWeatherStation:
                 msg = [serveraddr,b'',CREQUEST,messageid,sender] + msg
                 if len(self.serverjobs[serveraddr]) ==  0:
                     self.socket.send_multipart(msg)
-                    logging.debug('Client request at {:}:\n{:}'.format(self.clients[sender],msg))
+                    logging.debug('Client request from "{:}":\n{:}'.format(self.clients[sender],msg))
                 else:
                     self.serverjobs[serveraddr].append(msg)
             except StopIteration as e:
                 logging.debug('Trying to contact a server that does not exist')
 
         elif command == CDISCONNECT:
-            logging.debug('Client with ID {:} disconnecting',self.clients[sender])
+            logging.debug('Client "{:}" disconnecting'.format(self.clients[sender]))
             self.clients.pop(sender)
 
 
@@ -183,7 +186,7 @@ class QWeatherStation:
                 self.servermethods[sender] = servermethods
                 self.serverjobs[sender] = []
                 newmsg = [sender,b'',CREADY + CSUCCESS]
-                logging.info('Server {:} ready at: {:}'.format(servername,int.from_bytes(sender,byteorder='big')))
+                logging.info('Server "{:}" ready at: {:}'.format(servername,int.from_bytes(sender,byteorder='big')))
             self.socket.send_multipart(newmsg)
 
         elif command == CREPLY:
@@ -196,15 +199,15 @@ class QWeatherStation:
                 timeouttask = self.requesttimeoutdict.pop(messageid+client)
                 timeouttask.cancel()
                 self.socket.send_multipart(msg)
-                logging.debug('Server answer to ID:{:}:\n{:}'.format(int.from_bytes(self.clients[sender],byteorder='big'),msg))
+                logging.debug('Server answer to Client "{:}":\n{:}'.format(self.clients[client],msg))
                 if len(self.serverjobs[sender]) > 0:
                     self.socket.send_multipart(self.serverjobs[sender].pop(0))
             except KeyError:
-                Print("Trying to send answer to client that does not exist")
+                print("Trying to send answer to client that does not exist")
 
         elif command == SDISCONNECT:
             server = msg.pop(0).decode()
-            logging.debug('Server with ID {:} disconnecting',self.servers[sender])
+            logging.debug('Server  "{:}" disconnecting'.format(self.servers[sender]))
             self.servers.pop(sender)
             self.serverjobs.pop(sender)
             self.servermethods.pop(sender)
@@ -212,7 +215,7 @@ class QWeatherStation:
 
     async def ping_connections(self):
         self.__ping()
-        await asyncio.sleep(10)
+        await asyncio.sleep(2)
         self.__check_ping()
 
     def __ping(self):
@@ -221,14 +224,8 @@ class QWeatherStation:
             self.socket.send_multipart([addresse,b'',CPING,b'P'])
             self.pinged.append(addresse)
 
-        for aclient in self.clients.keys():
-            self.socket.send_multipart([aclient,b'',CPING,b'P'])
-            self.pinged.append(aclient)
-
     def __check_ping(self):
         for aping in self.pinged:
-            if aping in self.clients.keys():
-                del self.clients[aping]
             for aname,aserver in self.servers.items():
                 if aping == aserver[0]:
                     break
