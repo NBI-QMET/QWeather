@@ -12,7 +12,6 @@ setup(
     long_description=open('README.rst').read(),
     install_requires=[
         "pyzmq >= 17.0.0.b3",
-        "pyqt5 >= 5.13.1"
     ],
     rpython_requires='~=3.5'
 )
