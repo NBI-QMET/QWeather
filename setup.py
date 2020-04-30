@@ -11,8 +11,7 @@ setup(
     description='A zeromq based distributed messaging platform',
     long_description=open('README.rst').read(),
     install_requires=[
-        "pyzmq >= 17.0.0.b3",
-        "pyqt5 >= 5.13.1"
+        "pyzmq >= 17.0.0.b3"
     ],
     rpython_requires='~=3.5'
 )
