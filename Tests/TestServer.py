@@ -3,31 +3,54 @@ sys.path.append('../')
 import time
 import numpy as np
 from qweather import QWeatherServer, QMethod
+import asyncio
 
 class Server(QWeatherServer):
 
-    def __init__(self):
+    def __init__(self,name,verbose,debug):
         self.QWeatherStationIP = "tcp://localhost:5559"
+<<<<<<< HEAD
         self.servername = 'TestServer'
         self.verbose = True
         self.debug = False
+=======
+        self.servername = name
+        self.verbose = verbose
+        self.debug = debug
+        super().__init__()
+>>>>>>> develop
         self.initialize_sockets()
 
     @QMethod
-    def get_number(self,offset = 0):
-        """Return a numper upon request"""
-#        socket.send(b"%f" % np.random.rand())
-        #time.sleep(2)
-        num = (np.random.rand()+offset)
-        return num
+    def get_number(self):
+        """Returns the number 2"""
+        return 2
 
     @QMethod
-    def multiply_stuff(self,a,b = None):
-        """Return the multipla of a and b"""
-        if b is None:
-            return a*a
-        else:
-            return a*b
+    def crashing_function(self):
+        """Does an illegal division by zero and crashes the server"""
+        1/0
+        return
+
+    @QMethod
+    def very_long_function(self):
+        """Waits for 6 seconds before returning"""
+        time.sleep(6)
+        return 2
+
+
+    @QMethod
+    def ping(self):
+        self.ping_broker()
+
+    @QMethod
+    def do_something_scheduled(self,sleeptime=None):
+        for i in range(10):
+            num = np.random.rand(5)
+            print('broadcasting ',num)
+            self.broadcast(num)
+            if sleeptime is not None:
+                time.sleep(sleeptime)
 
     @QMethod
     def long_operation(self,delaytime):
@@ -40,5 +63,13 @@ class Server(QWeatherServer):
 
 
 if __name__ == "__main__":
-    server = Server()
+    import argparse
+    my_parser = argparse.ArgumentParser()
+    my_parser.add_argument('--verbose', action='store_true')
+    my_parser.add_argument('--debug', action='store_true')
+    my_parser.add_argument('name', nargs = '?')
+
+    args = vars(my_parser.parse_args())
+    server = Server(name=args['name'],verbose=args['verbose'],debug = args['debug'])
+    
     server.run()

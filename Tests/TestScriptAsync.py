@@ -19,15 +19,15 @@ procServer2 = subprocess.Popen(['python', 'TestServer2.py'])
 time.sleep(0.3)
 brokerconn = "tcp://localhost:5559"
 
-client  = qweather.QWeatherClient(brokerconn)
+client  = qweather.QWeatherClient(brokerconn,debug=False)
 loop = client.loop
 loop.create_task(client.run())
 
-for i in range(10):
+for i in range(2):
     a = loop.create_task(client.TestServer.get_number())
     b = loop.create_task(client.TestServer2.get_number())
-    print('a: ',await a)
-    print('b: ',await b)
+    print('a: ',a)
+    print('b: ',b)
 
 
 
