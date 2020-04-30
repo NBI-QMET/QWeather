@@ -1,3 +1,9 @@
+"""
+The client class of qweather\n
+This is the "user"
+"""
+
+
 from .constants import *
 import zmq
 import pickle
@@ -9,8 +15,9 @@ import logging
 from PyQt5.QtCore import pyqtSignal
 import atexit
 class QWeatherClient:
-
+    """Client class for the QWeather messaging framework"""
     class serverclass:
+        """Support class to represent the available servers as objects, with their exposed functions as callable attributes. The __repr__ makes it look like they are server objects"""
         def __init__(self,name,addr,methods,client):
             self.name = name
             self.addr = addr
@@ -20,6 +27,7 @@ class QWeatherClient:
 
 
         def bindingfunc(self,methodname,methoddoc):
+            """Ensures that "calling" the attribute of the "server"object with the name of a server function, sends a request to the server to execute that function and return the response"""
             def func(*args,**kwargs):
                 timeout = kwargs.pop('timeout',CSYNCTIMEOUT) # This pops the value for timeout if it exists in kwargs, or returns the default timeout value. So this saves a line of code on logic check
                 return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],timeout=timeout)
@@ -76,11 +84,6 @@ class QWeatherClient:
         atexit.register(self.close)
 
 
-
-
-
-
-
     def reconnect(self):
         '''connects or reconnects to the broker'''
         if self.poller:
@@ -98,18 +101,21 @@ class QWeatherClient:
         self.poller.register(self.subsocket,zmq.POLLIN)
 
     def subscribe(self,servername,function):
+        """Subscribe to a server with a callback function"""
         self.subsocket.setsockopt(zmq.SUBSCRIBE,servername.encode())
         self.subscribers[servername] = function
 
     def unsubscribe(self,servername):
+        """Unsubscribe from a server"""
         self.subsocket.setsockopt(zmq.UNSUBSCRIBE,servername.encode())
         self.subscribers.pop(servername)
         
     
     async def get_server_info(self):
+        """Get information about servers from the broker"""
         msg = [b'',b'C',CREADY,PCLIENT,self.name]
         self.send_message(msg)
-        msg =  await self.socket.recv_multipart()
+        msg = await self.recieve_message()
         empty = msg.pop(0)
         assert empty == b''
         command = msg.pop(0)
@@ -127,9 +133,11 @@ class QWeatherClient:
                 setattr(self,name,server)
                 self.serverlist.append(server)
 
-        return None
+    
 
     def send_request(self,body,timeout):
+        """Send a request. If the client is running (i.e. in async mode) send an async request, else send a synchronous request\n
+        Attach a messageID to each request. (0-255)"""
         self.messageid+=1
         if self.messageid > 255:
             self.messageid = 0
@@ -140,12 +148,13 @@ class QWeatherClient:
         return result
 
     def ping_broker(self):
+        """Ping the broker"""
         self.send_message([b'',b'P'])
         try:
             if len(self.loop.run_until_complete(self.poller.poll(timeout=2000))) == 0: #wait 2 seconds for a ping from the broker
                 raise Exception('QWeatherStation not found')
             else:
-                msg =  self.loop.run_until_complete(self.socket.recv_multipart())
+                msg =  self.loop.run_until_complete(self.recieve_message())
                 empty = msg.pop(0)
                 pong = msg.pop(0)
 
@@ -160,13 +169,14 @@ class QWeatherClient:
         
 
     def sync_send_request(self,body,ident,timeout):
+        """Synchronously send request. Timeout with the default timeoutvalue [FINDOUTHOWTOLINKTOTHECONSTANTSPAGETOSHOWDEFAULTVALUE]"""
         msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)
         if len(self.loop.run_until_complete(self.poller.poll(timeout=timeout))) == 0:
             return Exception('Synchronous request timed out. Try adding following keyword to function call: "timeout=XX" in ms')
         else:
-            msg = self.loop.run_until_complete(self.socket.recv_multipart())
+            msg = self.loop.run_until_complete(self.recieve_message())
             empty = msg.pop(0)
             assert empty == b''
             command = msg.pop(0)
@@ -176,60 +186,86 @@ class QWeatherClient:
             return answ
    
     async def async_send_request(self,body,ident):
+        """Ansynchronously send request. No explicit timeout on the client side for this. Relies on the "servertimeout" on the broker side"""
         server = body[0]
         msg = [b'',b'C',CREQUEST,ident]  + body
 
 
         self.send_message(msg)
-        answ = await self.recieve_message(ident+server)
+        answ = await self.recieve_future_message(ident+server) #Waits here until the future is set to completed
         self.futureobjectdict.pop(ident+server)
         return answ
 
     def send_message(self,msg):
+        """Send a multi-frame-message over the ZMQ socket"""
         self.socket.send_multipart(msg)
 
 
-    def recieve_message(self,ident):
+    def recieve_future_message(self,id):
+        """Create a future for the async request, add it to the dict of futures (id = messageid+server"""
         tmp = self.loop.create_future()
-        self.futureobjectdict[ident] = tmp
+        self.futureobjectdict[id] = tmp
         return tmp
 
+    async def recieve_message(self):
+        """Recieve a multi-frame-message over the zmq socket"""
+        msg = await self.socket.recv_multipart()
+        return msg
+
+    def handle_message(self,msg):
+        """First step of handling an incoming message\n
+        First asserts that the first frame is empty\n
+        Then sorts the message into either request+success, request+fail or ping"""
+        empty = msg.pop(0)
+        assert empty == b''
+        command = msg.pop(0)
+
+        if command == CREQUEST + CSUCCESS:
+            messageid = msg.pop(0)
+            servername = msg.pop(0)
+            msg = pickle.loads(msg[0])
+            self.handle_request_success(messageid,servername,msg)
+
+        elif command == CREQUEST + CFAIL:
+            messageid = msg.pop(0)
+            servername = msg.pop(0)
+            self.handle_request_fail(messageid,servername)
+
+        elif command == CPING:
+            ping = msg.pop(0)
+            if ping != b'P':
+                raise Exception('QWeatherStation sent wrong ping')
+            logging.debug('Recieved Ping from QWeatherStation')
+            self.send_message([b'',b'b'])
+
+    def handle_request_success(self,messageid,servername,msg):
+        """Handle successful request by setting the result of the future (manually finishing the future)"""
+        self.futureobjectdict[messageid + servername].set_result(msg)
+
+    def handle_request_fail(self,messageid,servername):
+        """Handle a failed request by setting the future to an exception"""
+        self.futureobjectdict[messageid+server].set_exception(Exception(msg.pop(0)))
+
+    def handle_broadcast(self,msg):
+        """Handle a message on the broadcast socket by calling the callback function connected to the relevant server"""
+        server= msg.pop(0).decode()
+        msg = pickle.loads(msg.pop(0))
+        self.subscribers[server](msg)
+
     async def run(self):
+        """Asynchronously run the client by repeatedly polling the recieving socket"""
         self.running = True
         while True:
             try:
                 socks = await self.poller.poll(1000)
                 socks = dict(socks)
                 if self.socket in socks:
-                    msg = await self.socket.recv_multipart()
-                    empty = msg.pop(0)
-                    assert empty == b''
-                    command = msg.pop(0)
-                    if command == CREQUEST + CSUCCESS:
-                        messageid = msg.pop(0)
-                        server = msg.pop(0)
-                        msg = pickle.loads(msg[0])
-                        self.futureobjectdict[messageid + server].set_result(msg)
-                    elif command == CREQUEST + CFAIL:
-                        messageid = msg.pop(0)
-                        server = msg.pop(0)
-                        self.futureobjectdict[messageid+server].set_exception(Exception(msg.pop(0)))
-                    elif command == CPING:
-                        ping = msg.pop(0)
-                        if ping != b'P':
-                            raise Exception('QWeatherStation sent wrong ping')
-                        logging.debug('Recieved Ping from QWeatherStation')
-                        self.send_message([b'',b'b'])
+                    msg = await self.recieve_message()
+                    self.handle_message(msg)
 
                 elif self.subsocket in socks:
-                    msg = await self.subsocket.recv_multipart()
-                    server= msg.pop(0).decode()
-                    msg = pickle.loads(msg.pop(0))
-                    self.subscribers[server](msg)
-
-
-
-
+                    msg = await self.recieve_message()
+                    self.handle_broadcast(msg)
 
             except KeyboardInterrupt:
                 self.close()
@@ -238,6 +274,7 @@ class QWeatherClient:
 
 
     def close(self):
+        """Closing function. Tells the broker that it disconnects. Is not called if the terminal is closed or the process is force-killed"""
         self.send_message([b'',b'C',CDISCONNECT])
         self.poller.unregister(self.socket)
         self.socket.close()
@@ -245,7 +282,6 @@ class QWeatherClient:
 
 
     def __repr__(self):
-        #self.get_server_info()
         msg = ""
         if len(self.serverlist) == 0:
             return 'No servers connected'

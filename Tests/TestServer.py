@@ -8,11 +8,11 @@ import asyncio
 class Server(QWeatherServer):
 
     def __init__(self,name,verbose,debug):
-        super().__init__()
         self.QWeatherStationIP = "tcp://localhost:5559"
         self.servername = name
         self.verbose = verbose
         self.debug = debug
+        super().__init__()
         self.initialize_sockets()
 
     @QMethod
