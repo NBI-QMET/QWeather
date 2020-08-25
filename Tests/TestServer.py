@@ -9,10 +9,16 @@ class Server(QWeatherServer):
 
     def __init__(self,name,verbose,debug):
         self.QWeatherStationIP = "tcp://localhost:5559"
+<<<<<<< HEAD
+        self.servername = 'TestServer'
+        self.verbose = True
+        self.debug = False
+=======
         self.servername = name
         self.verbose = verbose
         self.debug = debug
         super().__init__()
+>>>>>>> develop
         self.initialize_sockets()
 
     @QMethod
@@ -45,6 +51,14 @@ class Server(QWeatherServer):
             self.broadcast(num)
             if sleeptime is not None:
                 time.sleep(sleeptime)
+
+    @QMethod
+    def long_operation(self,delaytime):
+        '''Delays for a number of seconds specified by delaytime'''
+        time.sleep(delaytime)
+        response ='Testserver1 is done'
+        print(response)
+        #return response
 
 
 

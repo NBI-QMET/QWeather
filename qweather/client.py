@@ -12,7 +12,6 @@ import re
 import asyncio
 import time
 import logging
-from PyQt5.QtCore import pyqtSignal
 import atexit
 class QWeatherClient:
     """Client class for the QWeather messaging framework"""
