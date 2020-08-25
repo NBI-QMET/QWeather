@@ -19,6 +19,7 @@ def QMethod(func):
     return func
 
 class QWeatherServer:
+    """Central broker for the communcation done in QWeather"""
     def __init__(self,verbose=False,debug=False):
         self.servername = self.servername.encode()
         formatting = '{:}: %(levelname)s: %(message)s'.format(self.servername)
