@@ -26,6 +26,7 @@ class QWeatherStation:
             #from zmq import Context,Poller
 #        import asyncio
  #       from zmq.asyncio import Context,Poller
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
@@ -124,23 +125,20 @@ class QWeatherStation:
             self.process_client(sender,command,msg)
 
         #Ping
-        elif SenderType == b'P':
-            if sender in self.clients.keys():
-                logging.debug('Recieved Ping from "{:}"'.format(self.clients[sender]))
-            else:
-                logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
+ #       elif SenderType == b'P':
+ #           if sender in self.clients.keys():
+ #               logging.debug('Recieved Ping from "{:}"'.format(self.clients[sender]))
+ #           else:
+ #               logging.debug('Recieved Ping from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
 
-            self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
+#            self.socket.send_multipart([sender,b'',b'b']) #Sending an upside down P (b) to indicate a pong       
 
         #Pong
-        elif SenderType ==b'b': 
-            print('got a pong')
+        elif SenderType ==b'b':
             logging.debug('Recieved Pong from ID:{:}'.format(int.from_bytes(sender,byteorder='big')))
             print(sender,self.pinged,sender in self.pinged)
             if sender in self.pinged:
-                print('before',self.pinged)
                 self.pinged.remove(sender)
-                print('after',self.pinged)
 
         #Execute command
         elif SenderType == b'#': 
@@ -148,12 +146,12 @@ class QWeatherStation:
             if command == b'P': #request broker to ping all servers and remove old ones
                 logging.debug('Ping of all servers requested')
                 self.loop.create_task(self.ping_connections())
-            elif command == b'R': #requests the broker to "restart" by removing all connections
-                for atask in self.requesttimeoutdict.items():
-                    atask.cancel()
-                self.requesttimeoutdict = {}
-                self.servers = {}
-                self.clients = {}
+#            elif command == b'R': #requests the broker to "restart" by removing all connections
+#                for atask in self.requesttimeoutdict.items():
+#                    atask.cancel()
+#                self.requesttimeoutdict = {}
+#                self.servers = {}
+#                self.clients = {}
 
             if sender in self.clients.keys():
                 logging.debug('Recieved Ping from "{:}"'.format(self.clients[sender]))
@@ -296,13 +294,15 @@ class QWeatherStation:
             self.pinged.append(addresse)
 
     def __check_ping(self):
+        print([self.servers[i] for i in self.pinged])
         for aping in self.pinged:
             for aname,aserver in self.servers.items():
-                if aping == aserver[0]:
+                print(self.servers[aping],aserver)
+                if aping == aname:
+                    logging.debug('Found a server that didnt respond to the ping. Removing: ',aserver)
+                    logging.debug()
                     break
             del self.servers[aname]
-        print('servers:',self.servers)
-#        print(self.pinged)
         self.pinged = []
 
     def get_servers(self):
