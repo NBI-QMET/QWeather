@@ -28,8 +28,8 @@ class QWeatherClient:
         def bindingfunc(self,methodname,methoddoc):
             """Ensures that "calling" the attribute of the "server"object with the name of a server function, sends a request to the server to execute that function and return the response"""
             def func(*args,**kwargs):
-                timeout = kwargs.pop('timeout',CSYNCTIMEOUT) # This pops the value for timeout if it exists in kwargs, or returns the default timeout value. So this saves a line of code on logic check
-                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],timeout=timeout)
+                timeout = kwargs.pop('qweather_timeout',CSYNCTIMEOUT) # This pops the value for timeout if it exists in kwargs, or returns the default timeout value. So this saves a line of code on logic check
+                return self.client.send_request([self.name.encode(),methodname.encode(),pickle.dumps([args,kwargs])],qweather_timeout=timeout)
             func.__name__ = methodname
             func.__doc__ = methoddoc
             func.__repr__ = lambda: methoddoc
@@ -61,6 +61,7 @@ class QWeatherClient:
         assert self.QWeatherStationIP[:6] == 'tcp://', 'Ip not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
         assert len(self.QWeatherStationSocket) == 4, 'Port not understood (tcp://xxx.xxx.xxx.xxx:XXXX or txp://localhost:XXXX)'
         if loop is None:
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             self.loop = asyncio.get_event_loop()
         else:
             self.loop = loop
@@ -134,7 +135,7 @@ class QWeatherClient:
 
     
 
-    def send_request(self,body,timeout):
+    def send_request(self,body,qweather_timeout):
         """Send a request. If the client is running (i.e. in async mode) send an async request, else send a synchronous request\n
         Attach a messageID to each request. (0-255)"""
         self.messageid+=1
@@ -143,7 +144,7 @@ class QWeatherClient:
         if self.running:
             result =  asyncio.get_event_loop().create_task(self.async_send_request(body,self.messageid.to_bytes(1,'big')))
         else:
-            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'),timeout)
+            result = self.sync_send_request(body,self.messageid.to_bytes(1,'big'),qweather_timeout)
         return result
 
     def ping_broker(self):
@@ -167,13 +168,13 @@ class QWeatherClient:
             raise e
         
 
-    def sync_send_request(self,body,ident,timeout):
+    def sync_send_request(self,body,ident,qweather_timeout):
         """Synchronously send request. Timeout with the default timeoutvalue [FINDOUTHOWTOLINKTOTHECONSTANTSPAGETOSHOWDEFAULTVALUE]"""
         msg = [b'',b'C',CREQUEST,ident]  + body
         server = body[0]
         self.send_message(msg)
-        if len(self.loop.run_until_complete(self.poller.poll(timeout=timeout))) == 0:
-            return Exception('Synchronous request timed out. Try adding following keyword to function call: "timeout=XX" in ms')
+        if len(self.loop.run_until_complete(self.poller.poll(timeout=qweather_timeout))) == 0:
+            return Exception('Synchronous request timed out. Try adding following keyword to function call: "qweather_timeout=X" where X is the desired timeout in ms')
         else:
             msg = self.loop.run_until_complete(self.recieve_message())
             empty = msg.pop(0)
