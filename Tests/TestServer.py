@@ -7,7 +7,7 @@ import asyncio
 
 class Server(QWeatherServer):
 
-    def __init__(self,name,verbose,debug):
+    def __init__(self,name='Testserver',verbose=True,debug=False):
         self.QWeatherStationIP = "tcp://localhost:5559"
 <<<<<<< HEAD
         self.servername = 'TestServer'
