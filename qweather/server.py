@@ -19,8 +19,10 @@ def QMethod(func):
     return func
 
 class QWeatherServer:
-    """Central broker for the communcation done in QWeather"""
-    def __init__(self,verbose=False,debug=False):
+    """Base class for qweather server"""
+
+    def initialize_sockets(self):
+        """Setup the sockets for communication"""
         self.servername = self.servername.encode()
         formatting = '{:}: %(levelname)s: %(message)s'.format(self.servername)
         if self.debug:
@@ -28,12 +30,8 @@ class QWeatherServer:
         if self.verbose:
             logging.basicConfig(format=formatting,level=logging.INFO)
         pass
+        atexit.register(self.close)        
 
-        atexit.register(self.close)
-
-
-    def initialize_sockets(self):
-        """Setup the sockets for communication"""        
         logging.info('#########\n Connecting {:} to QWeatherStation on IP: {:}'.format(self.servername,self.QWeatherStationIP))
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.DEALER)
